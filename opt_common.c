@@ -46,8 +46,12 @@
 #include "libavformat/avformat.h"
 #include "libavformat/version.h"
 
+#if CONFIG_AVDEVICE
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
+#else
+#include "libavutil/opt.h"
+#endif
 
 #include "libavfilter/avfilter.h"
 #include "libavfilter/version.h"
@@ -190,7 +194,9 @@ static void print_all_libs_info(int flags, int level)
     PRINT_LIB_INFO(avutil,     AVUTIL,     flags, level);
     PRINT_LIB_INFO(avcodec,    AVCODEC,    flags, level);
     PRINT_LIB_INFO(avformat,   AVFORMAT,   flags, level);
+#if CONFIG_AVDEVICE
     PRINT_LIB_INFO(avdevice,   AVDEVICE,   flags, level);
+#endif
     PRINT_LIB_INFO(avfilter,   AVFILTER,   flags, level);
     PRINT_LIB_INFO(swscale,    SWSCALE,    flags, level);
     PRINT_LIB_INFO(swresample, SWRESAMPLE, flags, level);
