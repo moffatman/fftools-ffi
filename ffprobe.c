@@ -54,8 +54,10 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/timecode.h"
 #include "libavutil/timestamp.h"
+#if CONFIG_AVDEVICE
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
+#endif
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
 #include "libswresample/swresample.h"
@@ -3562,7 +3564,9 @@ static void ffprobe_show_library_versions(WriterContext *w)
     SHOW_LIB_VERSION(avutil,     AVUTIL);
     SHOW_LIB_VERSION(avcodec,    AVCODEC);
     SHOW_LIB_VERSION(avformat,   AVFORMAT);
+#if CONFIG_AVDEVICE
     SHOW_LIB_VERSION(avdevice,   AVDEVICE);
+#endif
     SHOW_LIB_VERSION(avfilter,   AVFILTER);
     SHOW_LIB_VERSION(swscale,    SWSCALE);
     SHOW_LIB_VERSION(swresample, SWRESAMPLE);

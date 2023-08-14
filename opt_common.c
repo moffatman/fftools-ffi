@@ -62,8 +62,10 @@
 #include "libswresample/swresample.h"
 #include "libswresample/version.h"
 
+#if CONFIG_POSTPROC
 #include "libpostproc/postprocess.h"
 #include "libpostproc/version.h"
+#endif
 
 enum show_muxdemuxers {
     SHOW_DEFAULT,
