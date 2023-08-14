@@ -5,7 +5,6 @@ ffmpeg = [
 	dependency('libavcodec'),
 	dependency('libavutil'),
 	dependency('libavfilter'),
-	dependency('libavdevice'),
 	dependency('libswresample'),
 	dependency('libswscale')
 ]
