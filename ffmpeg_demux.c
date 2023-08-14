@@ -38,6 +38,8 @@
 
 #include "libavformat/avformat.h"
 
+#include "fftools.h"
+
 static const char *const opt_name_discard[]                   = {"discard", NULL};
 static const char *const opt_name_reinit_filters[]            = {"reinit_filter", NULL};
 static const char *const opt_name_fix_sub_duration[]          = {"fix_sub_duration", NULL};
@@ -70,6 +72,8 @@ typedef struct Demuxer {
     int                   thread_queue_size;
     pthread_t             thread;
     int                   non_blocking;
+    /* To fix log callbacks in demuxer thread */
+    FFToolsSession       *session;
 } Demuxer;
 
 typedef struct DemuxMsg {
@@ -242,6 +246,8 @@ static void *input_thread(void *arg)
     unsigned flags = d->non_blocking ? AV_THREAD_MESSAGE_NONBLOCK : 0;
     int ret = 0;
 
+    session = d->session;
+
     pkt = av_packet_alloc();
     if (!pkt) {
         ret = AVERROR(ENOMEM);
@@ -394,6 +400,9 @@ static int thread_start(Demuxer *d)
             f->audio_duration_queue_size = nb_audio_dec;
         }
     }
+
+    // Propagate session to child thread
+    d->session = session;
 
     if ((ret = pthread_create(&d->thread, NULL, input_thread, d))) {
         av_log(NULL, AV_LOG_ERROR, "pthread_create failed: %s. Try to increase `ulimit -v` or decrease `ulimit -s`.\n", strerror(ret));

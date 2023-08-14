@@ -202,6 +202,8 @@ static void *muxer_thread(void *arg)
     AVPacket  *pkt = NULL;
     int        ret = 0;
 
+    session = mux->session;
+
     pkt = av_packet_alloc();
     if (!pkt) {
         ret = AVERROR(ENOMEM);
@@ -417,6 +419,8 @@ static int thread_start(Muxer *mux)
         return AVERROR(ENOMEM);
     }
 
+    mux->session = session;
+
     ret = pthread_create(&mux->thread, NULL, muxer_thread, (void*)mux);
     if (ret) {
         tq_free(&mux->tq);
@@ -616,7 +620,7 @@ int of_write_trailer(OutputFile *of)
 
     ret = thread_stop(mux);
     if (ret < 0)
-        main_return_code = ret;
+        main_ffmpeg_return_code = ret;
 
     ret = av_write_trailer(fc);
     if (ret < 0) {

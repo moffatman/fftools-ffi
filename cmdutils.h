@@ -24,7 +24,6 @@
 
 #include <stdint.h>
 
-#include "config.h"
 #include "libavcodec/avcodec.h"
 #include "libavfilter/avfilter.h"
 #include "libavformat/avformat.h"
@@ -35,19 +34,25 @@
 #endif
 
 /**
+ * Defines logs printed to stderr by ffmpeg. They are not filtered and always redirected.
+ */
+#define AV_LOG_STDERR    -16
+
+/**
  * program name, defined by the program for show_version().
  */
-extern const char program_name[];
+extern __thread char *program_name;
 
 /**
  * program birth year, defined by the program for show_banner()
  */
-extern const int program_birth_year;
+extern __thread int program_birth_year;
 
-extern AVDictionary *sws_dict;
-extern AVDictionary *swr_opts;
-extern AVDictionary *format_opts, *codec_opts;
-extern int hide_banner;
+extern __thread AVDictionary *sws_dict;
+extern __thread AVDictionary *swr_opts;
+extern __thread AVDictionary *format_opts, *codec_opts;
+extern __thread int hide_banner;
+extern __thread int find_stream_info;
 
 /**
  * Register a program-specific cleanup routine.
@@ -80,12 +85,6 @@ void init_dynload(void);
  * free the *_opts contexts and their contents.
  */
 void uninit_opts(void);
-
-/**
- * Trivial log callback.
- * Only suitable for opt_help and similar since it lacks prefix handling.
- */
-void log_callback_help(void* ptr, int level, const char* fmt, va_list vl);
 
 /**
  * Fallback for options that are not explicitly handled, these will be
@@ -199,7 +198,8 @@ void show_help_children(const AVClass *class, int flags);
  * Per-fftool specific help handler. Implemented in each
  * fftool, called by show_help().
  */
-void show_help_default(const char *opt, const char *arg);
+void show_help_default_ffmpeg(const char *opt, const char *arg);
+void show_help_default_ffprobe(const char *opt, const char *arg);
 
 /**
  * Parse the command line arguments.
@@ -288,6 +288,7 @@ typedef struct OptionParseContext {
  * Parse an options group and write results into optctx.
  *
  * @param optctx an app-specific options context. NULL for global options group
+ * @param g option group
  */
 int parse_optgroup(void *optctx, OptionGroup *g);
 

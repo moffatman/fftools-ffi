@@ -34,6 +34,8 @@
 #include "libavutil/fifo.h"
 #include "libavutil/thread.h"
 
+#include "fftools.h"
+
 typedef struct MuxStream {
     OutputStream ost;
 
@@ -87,6 +89,8 @@ typedef struct Muxer {
 
     SyncQueue *sq_mux;
     AVPacket *sq_pkt;
+    /* To fix log callbacks in demuxer thread */
+    FFToolsSession *session;
 } Muxer;
 
 /* whether we want to print an SDP, set in of_open() */

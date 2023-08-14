@@ -60,13 +60,13 @@
 #include "libswscale/version.h"
 #include "libswresample/swresample.h"
 #include "libswresample/version.h"
-#include "libpostproc/postprocess.h"
-#include "libpostproc/version.h"
 #include "libavfilter/version.h"
 #include "cmdutils.h"
 #include "opt_common.h"
 
 #include "libavutil/thread.h"
+
+#include "fftools.h"
 
 #if !HAVE_THREADS
 #  ifdef pthread_mutex_lock
@@ -92,51 +92,48 @@ typedef struct InputFile {
     int       nb_streams;
 } InputFile;
 
-const char program_name[] = "ffprobe";
-const int program_birth_year = 2007;
+__thread int do_bitexact = 0;
+__thread int do_count_frames = 0;
+__thread int do_count_packets = 0;
+__thread int do_read_frames  = 0;
+__thread int do_read_packets = 0;
+__thread int do_show_chapters = 0;
+__thread int do_show_error   = 0;
+__thread int do_show_format  = 0;
+__thread int do_show_frames  = 0;
+__thread int do_show_packets = 0;
+__thread int do_show_programs = 0;
+__thread int do_show_streams = 0;
+__thread int do_show_stream_disposition = 0;
+__thread int do_show_data    = 0;
+__thread int do_show_program_version  = 0;
+__thread int do_show_library_versions = 0;
+__thread int do_show_pixel_formats = 0;
+__thread int do_show_pixel_format_flags = 0;
+__thread int do_show_pixel_format_components = 0;
+__thread int do_show_log = 0;
 
-static int do_bitexact = 0;
-static int do_count_frames = 0;
-static int do_count_packets = 0;
-static int do_read_frames  = 0;
-static int do_read_packets = 0;
-static int do_show_chapters = 0;
-static int do_show_error   = 0;
-static int do_show_format  = 0;
-static int do_show_frames  = 0;
-static int do_show_packets = 0;
-static int do_show_programs = 0;
-static int do_show_streams = 0;
-static int do_show_stream_disposition = 0;
-static int do_show_data    = 0;
-static int do_show_program_version  = 0;
-static int do_show_library_versions = 0;
-static int do_show_pixel_formats = 0;
-static int do_show_pixel_format_flags = 0;
-static int do_show_pixel_format_components = 0;
-static int do_show_log = 0;
+__thread int do_show_chapter_tags = 0;
+__thread int do_show_format_tags = 0;
+__thread int do_show_frame_tags = 0;
+__thread int do_show_program_tags = 0;
+__thread int do_show_stream_tags = 0;
+__thread int do_show_packet_tags = 0;
 
-static int do_show_chapter_tags = 0;
-static int do_show_format_tags = 0;
-static int do_show_frame_tags = 0;
-static int do_show_program_tags = 0;
-static int do_show_stream_tags = 0;
-static int do_show_packet_tags = 0;
-
-static int show_value_unit              = 0;
-static int use_value_prefix             = 0;
-static int use_byte_value_binary_prefix = 0;
-static int use_value_sexagesimal_format = 0;
-static int show_private_data            = 1;
+__thread int show_value_unit              = 0;
+__thread int use_value_prefix             = 0;
+__thread int use_byte_value_binary_prefix = 0;
+__thread int use_value_sexagesimal_format = 0;
+__thread int show_private_data            = 1;
 
 #define SHOW_OPTIONAL_FIELDS_AUTO       -1
 #define SHOW_OPTIONAL_FIELDS_NEVER       0
 #define SHOW_OPTIONAL_FIELDS_ALWAYS      1
-static int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
+__thread int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
 
-static char *print_format;
-static char *stream_specifier;
-static char *show_data_hash;
+__thread char *print_format;
+__thread char *stream_specifier;
+__thread char *show_data_hash;
 
 typedef struct ReadInterval {
     int id;             ///< identifier
@@ -146,10 +143,10 @@ typedef struct ReadInterval {
     int duration_frames;
 } ReadInterval;
 
-static ReadInterval *read_intervals;
-static int read_intervals_nb = 0;
+__thread ReadInterval *read_intervals;
+__thread int read_intervals_nb = 0;
 
-static int find_stream_info  = 1;
+__thread int find_stream_info  = 1;
 
 /* section structure definition */
 
@@ -277,15 +274,18 @@ static struct section sections[] = {
     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
 };
 
-static const OptionDef *options;
+__thread OptionDef *ffprobe_options = NULL;
 
 /* FFprobe context */
-static const char *input_filename;
-static const char *print_input_filename;
-static const AVInputFormat *iformat = NULL;
-static const char *output_filename = NULL;
+__thread const char *input_filename;
+__thread const char *print_input_filename;
+__thread const AVInputFormat *iformat = NULL;
+__thread const char *output_filename = NULL;
 
-static struct AVHashContext *hash;
+__thread struct AVHashContext *hash;
+
+__thread volatile int main_ffprobe_return_code = 0;
+extern __thread volatile int longjmp_value;
 
 static const struct {
     double bin_val;
@@ -306,13 +306,13 @@ static const char unit_hertz_str[]          = "Hz"   ;
 static const char unit_byte_str[]           = "byte" ;
 static const char unit_bit_per_second_str[] = "bit/s";
 
-static int nb_streams;
-static uint64_t *nb_streams_packets;
-static uint64_t *nb_streams_frames;
-static int *selected_streams;
+__thread int nb_streams;
+__thread uint64_t *nb_streams_packets;
+__thread uint64_t *nb_streams_frames;
+__thread int *selected_streams;
 
 #if HAVE_THREADS
-pthread_mutex_t log_mutex;
+__thread pthread_mutex_t log_mutex;
 #endif
 typedef struct LogBuffer {
     char *context_name;
@@ -323,8 +323,8 @@ typedef struct LogBuffer {
     AVClassCategory parent_category;
 }LogBuffer;
 
-static LogBuffer *log_buffer;
-static int log_buffer_size;
+__thread LogBuffer *log_buffer;
+__thread int log_buffer_size;
 
 static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 {
@@ -600,12 +600,12 @@ static inline void writer_printf_avio(WriterContext *wctx, const char *fmt, ...)
 
 static inline void writer_w8_printf(WriterContext *wctx, int b)
 {
-    printf("%c", b);
+    av_log(NULL, AV_LOG_STDERR, "%c", b);
 }
 
 static inline void writer_put_str_printf(WriterContext *wctx, const char *str)
 {
-    printf("%s", str);
+    av_log(NULL, AV_LOG_STDERR, "%s", str);
 }
 
 static inline void writer_printf_printf(WriterContext *wctx, const char *fmt, ...)
@@ -977,12 +977,12 @@ static void writer_print_integers(WriterContext *wctx, const char *name,
 
 #define MAX_REGISTERED_WRITERS_NB 64
 
-static const Writer *registered_writers[MAX_REGISTERED_WRITERS_NB + 1];
+__thread const Writer *registered_writers[MAX_REGISTERED_WRITERS_NB + 1];
+
+__thread int next_registered_writer_idx = 0;
 
 static int writer_register(const Writer *writer)
 {
-    static int next_registered_writer_idx = 0;
-
     if (next_registered_writer_idx == MAX_REGISTERED_WRITERS_NB)
         return AVERROR(ENOMEM);
 
@@ -3566,7 +3566,6 @@ static void ffprobe_show_library_versions(WriterContext *w)
     SHOW_LIB_VERSION(avfilter,   AVFILTER);
     SHOW_LIB_VERSION(swscale,    SWSCALE);
     SHOW_LIB_VERSION(swresample, SWRESAMPLE);
-    SHOW_LIB_VERSION(postproc,   POSTPROC);
     writer_print_section_footer(w);
 }
 
@@ -3770,12 +3769,11 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
-void show_help_default(const char *opt, const char *arg)
+void show_help_default_ffprobe(const char *opt, const char *arg)
 {
-    av_log_set_callback(log_callback_help);
     show_usage();
-    show_help_options(options, "Main options:", 0, 0, 0);
-    printf("\n");
+    show_help_options(ffprobe_options, "Main options:", 0, 0, 0);
+    av_log(NULL, AV_LOG_STDERR, "\n");
 
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -3934,14 +3932,14 @@ static void print_section(SectionID id, int level)
 {
     const SectionID *pid;
     const struct section *section = &sections[id];
-    printf("%c%c%c",
+    av_log(NULL, AV_LOG_STDERR, "%c%c%c",
            section->flags & SECTION_FLAG_IS_WRAPPER           ? 'W' : '.',
            section->flags & SECTION_FLAG_IS_ARRAY             ? 'A' : '.',
            section->flags & SECTION_FLAG_HAS_VARIABLE_FIELDS  ? 'V' : '.');
-    printf("%*c  %s", level * 4, ' ', section->name);
+    av_log(NULL, AV_LOG_STDERR, "%*c  %s", level * 4, ' ', section->name);
     if (section->unique_name)
-        printf("/%s", section->unique_name);
-    printf("\n");
+        av_log(NULL, AV_LOG_STDERR, "/%s", section->unique_name);
+    av_log(NULL, AV_LOG_STDERR, "\n");
 
     for (pid = section->children_ids; *pid != -1; pid++)
         print_section(*pid, level+1);
@@ -3949,7 +3947,7 @@ static void print_section(SectionID id, int level)
 
 static int opt_sections(void *optctx, const char *opt, const char *arg)
 {
-    printf("Sections:\n"
+    av_log(NULL, AV_LOG_STDERR, "Sections:\n"
            "W.. = Section is a wrapper (contains other sections, no local entries)\n"
            ".A. = Section contains an array of elements of the same type\n"
            "..V = Section may contain a variable number of fields with variable keys\n"
@@ -3984,55 +3982,6 @@ DEFINE_OPT_SHOW_SECTION(program_version,  PROGRAM_VERSION)
 DEFINE_OPT_SHOW_SECTION(streams,          STREAMS)
 DEFINE_OPT_SHOW_SECTION(programs,         PROGRAMS)
 
-static const OptionDef real_options[] = {
-    CMDUTILS_COMMON_OPTIONS
-    { "f", HAS_ARG, {.func_arg = opt_format}, "force format", "format" },
-    { "unit", OPT_BOOL, {&show_value_unit}, "show unit of the displayed values" },
-    { "prefix", OPT_BOOL, {&use_value_prefix}, "use SI prefixes for the displayed values" },
-    { "byte_binary_prefix", OPT_BOOL, {&use_byte_value_binary_prefix},
-      "use binary prefixes for byte units" },
-    { "sexagesimal", OPT_BOOL,  {&use_value_sexagesimal_format},
-      "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
-    { "pretty", 0, {.func_arg = opt_pretty},
-      "prettify the format of displayed values, make it more human readable" },
-    { "print_format", OPT_STRING | HAS_ARG, { &print_format },
-      "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
-    { "of", OPT_STRING | HAS_ARG, { &print_format }, "alias for -print_format", "format" },
-    { "select_streams", OPT_STRING | HAS_ARG, { &stream_specifier }, "select the specified streams", "stream_specifier" },
-    { "sections", OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
-    { "show_data",    OPT_BOOL, { &do_show_data }, "show packets data" },
-    { "show_data_hash", OPT_STRING | HAS_ARG, { &show_data_hash }, "show packets data hash" },
-    { "show_error",   0, { .func_arg = &opt_show_error },  "show probing error" },
-    { "show_format",  0, { .func_arg = &opt_show_format }, "show format/container info" },
-    { "show_frames",  0, { .func_arg = &opt_show_frames }, "show frames info" },
-    { "show_entries", HAS_ARG, {.func_arg = opt_show_entries},
-      "show a set of specified entries", "entry_list" },
-#if HAVE_THREADS
-    { "show_log", OPT_INT|HAS_ARG, { &do_show_log }, "show log" },
-#endif
-    { "show_packets", 0, { .func_arg = &opt_show_packets }, "show packets info" },
-    { "show_programs", 0, { .func_arg = &opt_show_programs }, "show programs info" },
-    { "show_streams", 0, { .func_arg = &opt_show_streams }, "show streams info" },
-    { "show_chapters", 0, { .func_arg = &opt_show_chapters }, "show chapters info" },
-    { "count_frames", OPT_BOOL, { &do_count_frames }, "count the number of frames per stream" },
-    { "count_packets", OPT_BOOL, { &do_count_packets }, "count the number of packets per stream" },
-    { "show_program_version",  0, { .func_arg = &opt_show_program_version },  "show ffprobe version" },
-    { "show_library_versions", 0, { .func_arg = &opt_show_library_versions }, "show library versions" },
-    { "show_versions",         0, { .func_arg = &opt_show_versions }, "show program and library versions" },
-    { "show_pixel_formats", 0, { .func_arg = &opt_show_pixel_formats }, "show pixel format descriptions" },
-    { "show_optional_fields", HAS_ARG, { .func_arg = &opt_show_optional_fields }, "show optional fields" },
-    { "show_private_data", OPT_BOOL, { &show_private_data }, "show private data" },
-    { "private",           OPT_BOOL, { &show_private_data }, "same as show_private_data" },
-    { "bitexact", OPT_BOOL, {&do_bitexact}, "force bitexact output" },
-    { "read_intervals", HAS_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
-    { "i", HAS_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
-    { "o", HAS_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
-    { "print_filename", HAS_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
-    { "find_stream_info", OPT_BOOL | OPT_INPUT | OPT_EXPERT, { &find_stream_info },
-        "read and decode the streams to fill missing information with heuristics" },
-    { NULL, },
-};
-
 static inline int check_section_show_entries(int section_id)
 {
     int *id;
@@ -4050,144 +3999,305 @@ static inline int check_section_show_entries(int section_id)
             do_show_##varname = 1;                                      \
     } while (0)
 
-int main(int argc, char **argv)
+void ffprobe_var_cleanup() {
+    main_ffprobe_return_code = 0;
+    longjmp_value = 0;
+
+    do_bitexact = 0;
+    do_count_frames = 0;
+    do_count_packets = 0;
+    do_read_frames  = 0;
+    do_read_packets = 0;
+    do_show_chapters = 0;
+    do_show_error   = 0;
+    do_show_format  = 0;
+    do_show_frames  = 0;
+    do_show_packets = 0;
+    do_show_programs = 0;
+    do_show_streams = 0;
+    do_show_stream_disposition = 0;
+    do_show_data    = 0;
+    do_show_program_version  = 0;
+    do_show_library_versions = 0;
+    do_show_pixel_formats = 0;
+    do_show_pixel_format_flags = 0;
+    do_show_pixel_format_components = 0;
+    do_show_log = 0;
+
+    do_show_chapter_tags = 0;
+    do_show_format_tags = 0;
+    do_show_frame_tags = 0;
+    do_show_program_tags = 0;
+    do_show_stream_tags = 0;
+    do_show_packet_tags = 0;
+
+    show_value_unit              = 0;
+    use_value_prefix             = 0;
+    use_byte_value_binary_prefix = 0;
+    use_value_sexagesimal_format = 0;
+    show_private_data            = 1;
+
+    print_format = NULL;
+    stream_specifier = NULL;
+    show_data_hash = NULL;
+
+    read_intervals = NULL;
+    read_intervals_nb = 0;
+    find_stream_info  = 1;
+
+    ffprobe_options = NULL;
+
+    input_filename = NULL;
+    print_input_filename = NULL;
+    iformat = NULL;
+
+    hash = NULL;
+
+    main_ffprobe_return_code = 0;
+
+    nb_streams = 0;
+    nb_streams_packets = NULL;
+    nb_streams_frames = NULL;
+    selected_streams = NULL;
+
+    log_buffer = NULL;
+    log_buffer_size = 0;
+}
+
+int ffprobe_execute(int argc, char **argv)
 {
+    char _program_name[] = "ffprobe";
+    program_name = (char*)&_program_name;
+    program_birth_year = 2007;
+
+    OptionDef options[] = {
+        { "L",           OPT_EXIT,             { .func_arg = show_license },     "show license" },
+        { "h",           OPT_EXIT,             { .func_arg = show_help },        "show help", "topic" },
+        { "?",           OPT_EXIT,             { .func_arg = show_help },        "show help", "topic" },
+        { "help",        OPT_EXIT,             { .func_arg = show_help },        "show help", "topic" },
+        { "-help",       OPT_EXIT,             { .func_arg = show_help },        "show help", "topic" },
+        { "version",     OPT_EXIT,             { .func_arg = show_version },     "show version" },
+        { "buildconf",   OPT_EXIT,             { .func_arg = show_buildconf },   "show build configuration"},
+        { "formats",     OPT_EXIT,             { .func_arg = show_formats },     "show available formats"},
+        { "muxers",      OPT_EXIT,             { .func_arg = show_muxers },      "show available muxers"},
+        { "demuxers",    OPT_EXIT,             { .func_arg = show_demuxers },    "show available demuxers"},
+        { "devices",     OPT_EXIT,             { .func_arg = show_devices },     "show available devices"},
+        { "codecs",      OPT_EXIT,             { .func_arg = show_codecs },      "show available codecs"},
+        { "decoders",    OPT_EXIT,             { .func_arg = show_decoders },    "show available decoders"},
+        { "encoders",    OPT_EXIT,             { .func_arg = show_encoders },    "show available encoders"},
+        { "bsfs",        OPT_EXIT,             { .func_arg = show_bsfs },        "show available bit stream filters"},
+        { "protocols",   OPT_EXIT,             { .func_arg = show_protocols },   "show available protocols"},
+        { "filters",     OPT_EXIT,             { .func_arg = show_filters },     "show available filters"},
+        { "pix_fmts",    OPT_EXIT,             { .func_arg = show_pix_fmts },    "show available pixel formats"},
+        { "layouts",     OPT_EXIT,             { .func_arg = show_layouts },     "show standard channel layouts"},
+        { "sample_fmts", OPT_EXIT,             { .func_arg = show_sample_fmts }, "show available audio sample formats"},
+        { "dispositions", OPT_EXIT,            { .func_arg = show_dispositions}, "show available stream dispositions"},
+        { "colors",      OPT_EXIT,             { .func_arg = show_colors },      "show available color names"},
+        { "loglevel",    HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel"},
+        { "v",           HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel"},
+        { "report",      0,                    { .func_arg = opt_report },       "generate a report"},
+        { "max_alloc",   HAS_ARG,              { .func_arg = opt_max_alloc },    "set maximum size of a single allocated block", "bytes"},
+        { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags"},
+        { "cpucount",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpucount },     "force specific cpu count", "count"},
+        { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner"},
+        #if CONFIG_AVDEVICE
+        { "sources"    , OPT_EXIT | HAS_ARG, { .func_arg = show_sources }, "list sources of the input device", "device" },
+        { "sinks"      , OPT_EXIT | HAS_ARG, { .func_arg = show_sinks }, "list sinks of the output device", "device" },
+        #endif
+        { "f", HAS_ARG, {.func_arg = opt_format}, "force format", "format" },
+        { "unit", OPT_BOOL, {&show_value_unit}, "show unit of the displayed values" },
+        { "prefix", OPT_BOOL, {&use_value_prefix}, "use SI prefixes for the displayed values" },
+        { "byte_binary_prefix", OPT_BOOL, {&use_byte_value_binary_prefix},
+        "use binary prefixes for byte units" },
+        { "sexagesimal", OPT_BOOL,  {&use_value_sexagesimal_format},
+        "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
+        { "pretty", 0, {.func_arg = opt_pretty},
+        "prettify the format of displayed values, make it more human readable" },
+        { "print_format", OPT_STRING | HAS_ARG, { &print_format },
+        "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
+        { "of", OPT_STRING | HAS_ARG, { &print_format }, "alias for -print_format", "format" },
+        { "select_streams", OPT_STRING | HAS_ARG, { &stream_specifier }, "select the specified streams", "stream_specifier" },
+        { "sections", OPT_EXIT, {.func_arg = opt_sections}, "print sections structure and section information, and exit" },
+        { "show_data",    OPT_BOOL, { &do_show_data }, "show packets data" },
+        { "show_data_hash", OPT_STRING | HAS_ARG, { &show_data_hash }, "show packets data hash" },
+        { "show_error",   0, { .func_arg = &opt_show_error },  "show probing error" },
+        { "show_format",  0, { .func_arg = &opt_show_format }, "show format/container info" },
+        { "show_frames",  0, { .func_arg = &opt_show_frames }, "show frames info" },
+        { "show_entries", HAS_ARG, {.func_arg = opt_show_entries},
+        "show a set of specified entries", "entry_list" },
+    #if HAVE_THREADS
+        { "show_log", OPT_INT|HAS_ARG, { &do_show_log }, "show log" },
+    #endif
+        { "show_packets", 0, { .func_arg = &opt_show_packets }, "show packets info" },
+        { "show_programs", 0, { .func_arg = &opt_show_programs }, "show programs info" },
+        { "show_streams", 0, { .func_arg = &opt_show_streams }, "show streams info" },
+        { "show_chapters", 0, { .func_arg = &opt_show_chapters }, "show chapters info" },
+        { "count_frames", OPT_BOOL, { &do_count_frames }, "count the number of frames per stream" },
+        { "count_packets", OPT_BOOL, { &do_count_packets }, "count the number of packets per stream" },
+        { "show_program_version",  0, { .func_arg = &opt_show_program_version },  "show ffprobe version" },
+        { "show_library_versions", 0, { .func_arg = &opt_show_library_versions }, "show library versions" },
+        { "show_versions",         0, { .func_arg = &opt_show_versions }, "show program and library versions" },
+        { "show_pixel_formats", 0, { .func_arg = &opt_show_pixel_formats }, "show pixel format descriptions" },
+        { "show_optional_fields", HAS_ARG, { .func_arg = &opt_show_optional_fields }, "show optional fields" },
+        { "show_private_data", OPT_BOOL, { &show_private_data }, "show private data" },
+        { "private",           OPT_BOOL, { &show_private_data }, "same as show_private_data" },
+        { "bitexact", OPT_BOOL, {&do_bitexact}, "force bitexact output" },
+        { "read_intervals", HAS_ARG, {.func_arg = opt_read_intervals}, "set read intervals", "read_intervals" },
+        { "i", HAS_ARG, {.func_arg = opt_input_file_i}, "read specified file", "input_file"},
+        { "o", HAS_ARG, {.func_arg = opt_output_file_o}, "write to specified output", "output_file"},
+        { "print_filename", HAS_ARG, {.func_arg = opt_print_filename}, "override the printed input filename", "print_file"},
+        { "find_stream_info", OPT_BOOL | OPT_INPUT | OPT_EXPERT, { &find_stream_info },
+            "read and decode the streams to fill missing information with heuristics" },
+        { NULL, },
+    };
+
     const Writer *w;
     WriterContext *wctx;
     char *buf;
     char *w_name = NULL, *w_args = NULL;
     int ret, input_ret, i;
 
-    init_dynload();
+    int savedCode = setjmp(session->ex_buf__);
+    if (savedCode == 0) {
 
-#if HAVE_THREADS
-    ret = pthread_mutex_init(&log_mutex, NULL);
-    if (ret != 0) {
-        goto end;
-    }
-#endif
-    av_log_set_flags(AV_LOG_SKIP_REPEATED);
-    register_exit(ffprobe_cleanup);
+        ffprobe_var_cleanup();
 
-    options = real_options;
-    parse_loglevel(argc, argv, options);
-    avformat_network_init();
-#if CONFIG_AVDEVICE
-    avdevice_register_all();
-#endif
+        init_dynload();
 
-    show_banner(argc, argv, options);
-    parse_options(NULL, argc, argv, options, opt_input_file);
-
-    if (do_show_log)
-        av_log_set_callback(log_callback);
-
-    /* mark things to show, based on -show_entries */
-    SET_DO_SHOW(CHAPTERS, chapters);
-    SET_DO_SHOW(ERROR, error);
-    SET_DO_SHOW(FORMAT, format);
-    SET_DO_SHOW(FRAMES, frames);
-    SET_DO_SHOW(LIBRARY_VERSIONS, library_versions);
-    SET_DO_SHOW(PACKETS, packets);
-    SET_DO_SHOW(PIXEL_FORMATS, pixel_formats);
-    SET_DO_SHOW(PIXEL_FORMAT_FLAGS, pixel_format_flags);
-    SET_DO_SHOW(PIXEL_FORMAT_COMPONENTS, pixel_format_components);
-    SET_DO_SHOW(PROGRAM_VERSION, program_version);
-    SET_DO_SHOW(PROGRAMS, programs);
-    SET_DO_SHOW(STREAMS, streams);
-    SET_DO_SHOW(STREAM_DISPOSITION, stream_disposition);
-    SET_DO_SHOW(PROGRAM_STREAM_DISPOSITION, stream_disposition);
-
-    SET_DO_SHOW(CHAPTER_TAGS, chapter_tags);
-    SET_DO_SHOW(FORMAT_TAGS, format_tags);
-    SET_DO_SHOW(FRAME_TAGS, frame_tags);
-    SET_DO_SHOW(PROGRAM_TAGS, program_tags);
-    SET_DO_SHOW(STREAM_TAGS, stream_tags);
-    SET_DO_SHOW(PROGRAM_STREAM_TAGS, stream_tags);
-    SET_DO_SHOW(PACKET_TAGS, packet_tags);
-
-    if (do_bitexact && (do_show_program_version || do_show_library_versions)) {
-        av_log(NULL, AV_LOG_ERROR,
-               "-bitexact and -show_program_version or -show_library_versions "
-               "options are incompatible\n");
-        ret = AVERROR(EINVAL);
-        goto end;
-    }
-
-    writer_register_all();
-
-    if (!print_format)
-        print_format = av_strdup("default");
-    if (!print_format) {
-        ret = AVERROR(ENOMEM);
-        goto end;
-    }
-    w_name = av_strtok(print_format, "=", &buf);
-    if (!w_name) {
-        av_log(NULL, AV_LOG_ERROR,
-               "No name specified for the output format\n");
-        ret = AVERROR(EINVAL);
-        goto end;
-    }
-    w_args = buf;
-
-    if (show_data_hash) {
-        if ((ret = av_hash_alloc(&hash, show_data_hash)) < 0) {
-            if (ret == AVERROR(EINVAL)) {
-                const char *n;
-                av_log(NULL, AV_LOG_ERROR,
-                       "Unknown hash algorithm '%s'\nKnown algorithms:",
-                       show_data_hash);
-                for (i = 0; (n = av_hash_names(i)); i++)
-                    av_log(NULL, AV_LOG_ERROR, " %s", n);
-                av_log(NULL, AV_LOG_ERROR, "\n");
-            }
+    #if HAVE_THREADS
+        ret = pthread_mutex_init(&log_mutex, NULL);
+        if (ret != 0) {
             goto end;
         }
-    }
+    #endif
+        av_log_set_flags(AV_LOG_SKIP_REPEATED);
+        register_exit(ffprobe_cleanup);
 
-    w = writer_get_by_name(w_name);
-    if (!w) {
-        av_log(NULL, AV_LOG_ERROR, "Unknown output format with name '%s'\n", w_name);
-        ret = AVERROR(EINVAL);
-        goto end;
-    }
+        ffprobe_options = options;
+        parse_loglevel(argc, argv, options);
+        avformat_network_init();
+    #if CONFIG_AVDEVICE
+        avdevice_register_all();
+    #endif
 
-    if ((ret = writer_open(&wctx, w, w_args,
-                           sections, FF_ARRAY_ELEMS(sections), output_filename)) >= 0) {
-        if (w == &xml_writer)
-            wctx->string_validation_utf8_flags |= AV_UTF8_FLAG_EXCLUDE_XML_INVALID_CONTROL_CODES;
+        show_banner(argc, argv, options);
+        parse_options(NULL, argc, argv, options, opt_input_file);
 
-        writer_print_section_header(wctx, SECTION_ID_ROOT);
+        if (do_show_log)
+            av_log_set_callback(log_callback);
 
-        if (do_show_program_version)
-            ffprobe_show_program_version(wctx);
-        if (do_show_library_versions)
-            ffprobe_show_library_versions(wctx);
-        if (do_show_pixel_formats)
-            ffprobe_show_pixel_formats(wctx);
+        /* mark things to show, based on -show_entries */
+        SET_DO_SHOW(CHAPTERS, chapters);
+        SET_DO_SHOW(ERROR, error);
+        SET_DO_SHOW(FORMAT, format);
+        SET_DO_SHOW(FRAMES, frames);
+        SET_DO_SHOW(LIBRARY_VERSIONS, library_versions);
+        SET_DO_SHOW(PACKETS, packets);
+        SET_DO_SHOW(PIXEL_FORMATS, pixel_formats);
+        SET_DO_SHOW(PIXEL_FORMAT_FLAGS, pixel_format_flags);
+        SET_DO_SHOW(PIXEL_FORMAT_COMPONENTS, pixel_format_components);
+        SET_DO_SHOW(PROGRAM_VERSION, program_version);
+        SET_DO_SHOW(PROGRAMS, programs);
+        SET_DO_SHOW(STREAMS, streams);
+        SET_DO_SHOW(STREAM_DISPOSITION, stream_disposition);
+        SET_DO_SHOW(PROGRAM_STREAM_DISPOSITION, stream_disposition);
 
-        if (!input_filename &&
-            ((do_show_format || do_show_programs || do_show_streams || do_show_chapters || do_show_packets || do_show_error) ||
-             (!do_show_program_version && !do_show_library_versions && !do_show_pixel_formats))) {
-            show_usage();
-            av_log(NULL, AV_LOG_ERROR, "You have to specify one input file.\n");
-            av_log(NULL, AV_LOG_ERROR, "Use -h to get full help or, even better, run 'man %s'.\n", program_name);
+        SET_DO_SHOW(CHAPTER_TAGS, chapter_tags);
+        SET_DO_SHOW(FORMAT_TAGS, format_tags);
+        SET_DO_SHOW(FRAME_TAGS, frame_tags);
+        SET_DO_SHOW(PROGRAM_TAGS, program_tags);
+        SET_DO_SHOW(STREAM_TAGS, stream_tags);
+        SET_DO_SHOW(PROGRAM_STREAM_TAGS, stream_tags);
+        SET_DO_SHOW(PACKET_TAGS, packet_tags);
+
+        if (do_bitexact && (do_show_program_version || do_show_library_versions)) {
+            av_log(NULL, AV_LOG_ERROR,
+                "-bitexact and -show_program_version or -show_library_versions "
+                "options are incompatible\n");
             ret = AVERROR(EINVAL);
-        } else if (input_filename) {
-            ret = probe_file(wctx, input_filename, print_input_filename);
-            if (ret < 0 && do_show_error)
-                show_error(wctx, ret);
+            goto end;
         }
 
-        input_ret = ret;
+        writer_register_all();
 
-        writer_print_section_footer(wctx);
-        ret = writer_close(&wctx);
-        if (ret < 0)
-            av_log(NULL, AV_LOG_ERROR, "Writing output failed: %s\n", av_err2str(ret));
+        if (!print_format)
+            print_format = av_strdup("default");
+        if (!print_format) {
+            ret = AVERROR(ENOMEM);
+            goto end;
+        }
+        w_name = av_strtok(print_format, "=", &buf);
+        if (!w_name) {
+            av_log(NULL, AV_LOG_ERROR,
+                "No name specified for the output format\n");
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+        w_args = buf;
 
-        ret = FFMIN(ret, input_ret);
+        if (show_data_hash) {
+            if ((ret = av_hash_alloc(&hash, show_data_hash)) < 0) {
+                if (ret == AVERROR(EINVAL)) {
+                    const char *n;
+                    av_log(NULL, AV_LOG_ERROR,
+                        "Unknown hash algorithm '%s'\nKnown algorithms:",
+                        show_data_hash);
+                    for (i = 0; (n = av_hash_names(i)); i++)
+                        av_log(NULL, AV_LOG_ERROR, " %s", n);
+                    av_log(NULL, AV_LOG_ERROR, "\n");
+                }
+                goto end;
+            }
+        }
+
+        w = writer_get_by_name(w_name);
+        if (!w) {
+            av_log(NULL, AV_LOG_ERROR, "Unknown output format with name '%s'\n", w_name);
+            ret = AVERROR(EINVAL);
+            goto end;
+        }
+
+        if ((ret = writer_open(&wctx, w, w_args,
+                            sections, FF_ARRAY_ELEMS(sections), output_filename)) >= 0) {
+            if (w == &xml_writer)
+                wctx->string_validation_utf8_flags |= AV_UTF8_FLAG_EXCLUDE_XML_INVALID_CONTROL_CODES;
+
+            writer_print_section_header(wctx, SECTION_ID_ROOT);
+
+            if (do_show_program_version)
+                ffprobe_show_program_version(wctx);
+            if (do_show_library_versions)
+                ffprobe_show_library_versions(wctx);
+            if (do_show_pixel_formats)
+                ffprobe_show_pixel_formats(wctx);
+
+            if (!input_filename &&
+                ((do_show_format || do_show_programs || do_show_streams || do_show_chapters || do_show_packets || do_show_error) ||
+                (!do_show_program_version && !do_show_library_versions && !do_show_pixel_formats))) {
+                show_usage();
+                av_log(NULL, AV_LOG_ERROR, "You have to specify one input file.\n");
+                av_log(NULL, AV_LOG_ERROR, "Use -h to get full help or, even better, run 'man %s'.\n", program_name);
+                ret = AVERROR(EINVAL);
+            } else if (input_filename) {
+                ret = probe_file(wctx, input_filename, print_input_filename);
+                if (ret < 0 && do_show_error)
+                    show_error(wctx, ret);
+            }
+
+            input_ret = ret;
+
+            writer_print_section_footer(wctx);
+            ret = writer_close(&wctx);
+            if (ret < 0)
+                av_log(NULL, AV_LOG_ERROR, "Writing output failed: %s\n", av_err2str(ret));
+
+            ret = FFMIN(ret, input_ret);
+        }
+
+        main_ffprobe_return_code = ret < 0;
+
+    } else {
+        main_ffprobe_return_code = longjmp_value;
     }
 
 end:
@@ -4201,5 +4311,5 @@ end:
 
     avformat_network_deinit();
 
-    return ret < 0;
+    return main_ffprobe_return_code;
 }

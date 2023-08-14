@@ -19,8 +19,6 @@
 #ifndef FFTOOLS_FFMPEG_H
 #define FFTOOLS_FFMPEG_H
 
-#include "config.h"
-
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -709,61 +707,60 @@ typedef struct OutputFile {
     int bitexact;
 } OutputFile;
 
-extern InputFile   **input_files;
-extern int        nb_input_files;
+extern __thread InputFile   **input_files;
+extern __thread int        nb_input_files;
 
-extern OutputFile   **output_files;
-extern int         nb_output_files;
+extern __thread OutputFile   **output_files;
+extern __thread int         nb_output_files;
 
-extern FilterGraph **filtergraphs;
-extern int        nb_filtergraphs;
+extern __thread FilterGraph **filtergraphs;
+extern __thread int        nb_filtergraphs;
 
-extern char *vstats_filename;
-extern char *sdp_filename;
+extern __thread char *vstats_filename;
+extern __thread char *sdp_filename;
 
-extern float audio_drift_threshold;
-extern float dts_delta_threshold;
-extern float dts_error_threshold;
+extern __thread float audio_drift_threshold;
+extern __thread float dts_delta_threshold;
+extern __thread float dts_error_threshold;
 
-extern enum VideoSyncMethod video_sync_method;
-extern float frame_drop_threshold;
-extern int do_benchmark;
-extern int do_benchmark_all;
-extern int do_hex_dump;
-extern int do_pkt_dump;
-extern int copy_ts;
-extern int start_at_zero;
-extern int copy_tb;
-extern int debug_ts;
-extern int exit_on_error;
-extern int abort_on_flags;
-extern int print_stats;
-extern int64_t stats_period;
-extern int qp_hist;
-extern int stdin_interaction;
-extern AVIOContext *progress_avio;
-extern float max_error_rate;
+extern __thread enum VideoSyncMethod video_sync_method;
+extern __thread float frame_drop_threshold;
+extern __thread int do_benchmark;
+extern __thread int do_benchmark_all;
+extern __thread int do_hex_dump;
+extern __thread int do_pkt_dump;
+extern __thread int copy_ts;
+extern __thread int start_at_zero;
+extern __thread int copy_tb;
+extern __thread int debug_ts;
+extern __thread int exit_on_error;
+extern __thread int abort_on_flags;
+extern __thread int print_stats;
+extern __thread int64_t stats_period;
+extern __thread int qp_hist;
+extern __thread int stdin_interaction;
+extern __thread AVIOContext *progress_avio;
+extern __thread float max_error_rate;
 
-extern char *filter_nbthreads;
-extern int filter_complex_nbthreads;
-extern int vstats_version;
-extern int auto_conversion_filters;
+extern __thread char *filter_nbthreads;
+extern __thread int filter_complex_nbthreads;
+extern __thread int vstats_version;
+extern __thread int auto_conversion_filters;
 
-extern const AVIOInterruptCB int_cb;
+extern __thread const AVIOInterruptCB int_cb;
 
-extern const OptionDef options[];
-extern HWDevice *filter_hw_device;
+extern __thread HWDevice *filter_hw_device;
 
-extern unsigned nb_output_dumped;
-extern int main_return_code;
+extern __thread unsigned nb_output_dumped;
+extern __thread int main_ffmpeg_return_code;
 
-extern int ignore_unknown_streams;
-extern int copy_unknown_streams;
+extern __thread int ignore_unknown_streams;
+extern __thread int copy_unknown_streams;
 
-extern int recast_media;
+extern __thread int recast_media;
 
 #if FFMPEG_OPT_PSNR
-extern int do_psnr;
+extern __thread int do_psnr;
 #endif
 
 void term_init(void);
@@ -806,6 +803,55 @@ int hw_device_setup_for_encode(OutputStream *ost);
 int hw_device_setup_for_filter(FilterGraph *fg);
 
 int hwaccel_decode_init(AVCodecContext *avctx);
+
+void set_report_callback(void (*callback)(int, float, float, int64_t, int, double, double));
+
+void cancel_operation(long id);
+
+int opt_map(void *optctx, const char *opt, const char *arg);
+#if FFMPEG_OPT_MAP_CHANNEL
+int opt_map_channel(void *optctx, const char *opt, const char *arg);
+#endif
+int opt_recording_timestamp(void *optctx, const char *opt, const char *arg);
+int opt_data_frames(void *optctx, const char *opt, const char *arg);
+int opt_progress(void *optctx, const char *opt, const char *arg);
+int opt_target(void *optctx, const char *opt, const char *arg);
+int opt_vsync(void *optctx, const char *opt, const char *arg);
+int opt_abort_on(void *optctx, const char *opt, const char *arg);
+int opt_stats_period(void *optctx, const char *opt, const char *arg);
+int opt_qscale(void *optctx, const char *opt, const char *arg);
+int opt_profile(void *optctx, const char *opt, const char *arg);
+int opt_filter_complex(void *optctx, const char *opt, const char *arg);
+int opt_filter_complex_script(void *optctx, const char *opt, const char *arg);
+int opt_attach(void *optctx, const char *opt, const char *arg);
+int opt_video_frames(void *optctx, const char *opt, const char *arg);
+int opt_video_codec(void *optctx, const char *opt, const char *arg);
+int opt_sameq(void *optctx, const char *opt, const char *arg);
+int opt_timecode(void *optctx, const char *opt, const char *arg);
+
+int opt_vstats_file(void *optctx, const char *opt, const char *arg);
+int opt_vstats(void *optctx, const char *opt, const char *arg);
+int opt_video_frames(void *optctx, const char *opt, const char *arg);
+int opt_old2new(void *optctx, const char *opt, const char *arg);
+int opt_streamid(void *optctx, const char *opt, const char *arg);
+int opt_bitrate(void *optctx, const char *opt, const char *arg);
+int show_hwaccels(void *optctx, const char *opt, const char *arg);
+int opt_video_filters(void *optctx, const char *opt, const char *arg);
+int opt_audio_frames(void *optctx, const char *opt, const char *arg);
+int opt_audio_qscale(void *optctx, const char *opt, const char *arg);
+int opt_audio_codec(void *optctx, const char *opt, const char *arg);
+int opt_channel_layout(void *optctx, const char *opt, const char *arg);
+int opt_preset(void *optctx, const char *opt, const char *arg);
+int opt_audio_filters(void *optctx, const char *opt, const char *arg);
+int opt_subtitle_codec(void *optctx, const char *opt, const char *arg);
+int opt_video_channel(void *optctx, const char *opt, const char *arg);
+int opt_video_standard(void *optctx, const char *opt, const char *arg);
+int opt_sdp_file(void *optctx, const char *opt, const char *arg);
+int opt_data_codec(void *optctx, const char *opt, const char *arg);
+int opt_init_hw_device(void *optctx, const char *opt, const char *arg);
+int opt_filter_hw_device(void *optctx, const char *opt, const char *arg);
+int opt_filter_threads(void *optctx, const char *opt, const char *arg);
+int opt_default_new(OptionsContext *o, const char *opt, const char *arg);
 
 /*
  * Initialize muxing state for the given stream, should be called
@@ -901,5 +947,7 @@ extern const char * const opt_name_codec_names[];
 extern const char * const opt_name_codec_tags[];
 extern const char * const opt_name_frame_rates[];
 extern const char * const opt_name_top_field_first[];
+
+int ffmpeg_execute(int argc, char **argv);
 
 #endif /* FFTOOLS_FFMPEG_H */

@@ -25,12 +25,13 @@
 #include <errno.h>
 #include <math.h>
 
+#include "fftools.h"
+
 /* Include only the enabled headers since some compilers (namely, Sun
    Studio) will not omit unused inline functions and create undefined
    references to libraries that are not being built. */
 
 #include "config.h"
-#include "compat/va_copy.h"
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
@@ -55,11 +56,15 @@
 #include "compat/w32dlfcn.h"
 #endif
 
-AVDictionary *sws_dict;
-AVDictionary *swr_opts;
-AVDictionary *format_opts, *codec_opts;
+__thread char *program_name;
+__thread int program_birth_year;
 
-int hide_banner = 0;
+__thread AVDictionary *sws_dict;
+__thread AVDictionary *swr_opts;
+__thread AVDictionary *format_opts, *codec_opts;
+
+__thread int hide_banner = 0;
+__thread volatile int longjmp_value = 0;
 
 void uninit_opts(void)
 {
@@ -67,11 +72,6 @@ void uninit_opts(void)
     av_dict_free(&sws_dict);
     av_dict_free(&format_opts);
     av_dict_free(&codec_opts);
-}
-
-void log_callback_help(void *ptr, int level, const char *fmt, va_list vl)
-{
-    vfprintf(stdout, fmt, vl);
 }
 
 void init_dynload(void)
@@ -83,7 +83,7 @@ void init_dynload(void)
 #endif
 }
 
-static void (*program_exit)(int ret);
+static __thread void (*program_exit)(int ret);
 
 void register_exit(void (*cb)(int ret))
 {
@@ -101,7 +101,10 @@ void exit_program(int ret)
     if (program_exit)
         program_exit(ret);
 
-    exit(ret);
+    // exit disabled and replaced with longjmp, exit value stored in longjmp_value
+    // exit(ret);
+    longjmp_value = ret;
+    longjmp(session->ex_buf__, ret);
 }
 
 double parse_number_or_die(const char *context, const char *numstr, int type,
@@ -153,7 +156,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
             continue;
 
         if (first) {
-            printf("%s\n", msg);
+            av_log(NULL, AV_LOG_STDERR, "%s\n", msg);
             first = 0;
         }
         av_strlcpy(buf, po->name, sizeof(buf));
@@ -161,9 +164,9 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
             av_strlcat(buf, " ", sizeof(buf));
             av_strlcat(buf, po->argname, sizeof(buf));
         }
-        printf("-%-17s  %s\n", buf, po->help);
+        av_log(NULL, AV_LOG_STDERR, "-%-17s  %s\n", buf, po->help);
     }
-    printf("\n");
+    av_log(NULL, AV_LOG_STDERR, "\n");
 }
 
 void show_help_children(const AVClass *class, int flags)
@@ -172,7 +175,7 @@ void show_help_children(const AVClass *class, int flags)
     const AVClass *child;
     if (class->option) {
         av_opt_show2(&class, NULL, flags, 0);
-        printf("\n");
+        av_log(NULL, AV_LOG_STDERR, "\n");
     }
 
     while (child = av_opt_child_class_iterate(class, &iter))
@@ -287,7 +290,7 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
     } else if (po->flags & OPT_BOOL || po->flags & OPT_INT) {
         *(int *)dst = parse_number_or_die(opt, arg, OPT_INT64, INT_MIN, INT_MAX);
     } else if (po->flags & OPT_INT64) {
-        *(int64_t *)dst = parse_number_or_die(opt, arg, OPT_INT64, INT64_MIN, INT64_MAX);
+        *(int64_t *)dst = parse_number_or_die(opt, arg, OPT_INT64, INT64_MIN, (double)INT64_MAX);
     } else if (po->flags & OPT_TIME) {
         *(int64_t *)dst = parse_time_or_die(opt, arg, 1);
     } else if (po->flags & OPT_FLOAT) {
@@ -368,9 +371,13 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
                 continue;
             }
             opt++;
-
-            if ((ret = parse_option(optctx, opt, argv[optindex], options)) < 0)
-                exit_program(1);
+            if (optindex >= argc) {
+                if ((ret = parse_option(optctx, opt, NULL, options)) < 0)
+                    exit_program(1);
+            } else {
+                if ((ret = parse_option(optctx, opt, argv[optindex], options)) < 0)
+                    exit_program(1);
+            }
             optindex += ret;
         } else {
             if (parse_arg_function)
@@ -480,7 +487,7 @@ void parse_loglevel(int argc, char **argv, const OptionDef *options)
 
     if (!idx)
         idx = locate_option(argc, argv, options, "v");
-    if (idx && argv[idx + 1])
+    if (idx && (idx + 1 < argc) && argv[idx + 1])
         opt_loglevel(NULL, "loglevel", argv[idx + 1]);
     idx = locate_option(argc, argv, options, "report");
     env = getenv_utf8("FFREPORT");
@@ -725,7 +732,9 @@ int split_commandline(OptionParseContext *octx, int argc, char *argv[],
 #define GET_ARG(arg)                                                           \
 do {                                                                           \
     arg = argv[optindex++];                                                    \
-    if (!arg) {                                                                \
+    if (optindex < argc) {                                                     \
+        arg = argv[optindex++];                                                \
+    } else {                                                                   \
         av_log(NULL, AV_LOG_ERROR, "Missing argument for option '%s'.\n", opt);\
         return AVERROR(EINVAL);                                                \
     }                                                                          \
@@ -745,7 +754,11 @@ do {                                                                           \
         if (po->name) {
             if (po->flags & OPT_EXIT) {
                 /* optional argument, e.g. -h */
-                arg = argv[optindex++];
+                if (optindex < argc) {
+                    arg = argv[optindex++];
+                } else {
+                    arg = NULL;
+                }
             } else if (po->flags & HAS_ARG) {
                 GET_ARG(arg);
             } else {
@@ -759,7 +772,7 @@ do {                                                                           \
         }
 
         /* AVOptions */
-        if (argv[optindex]) {
+        if ((optindex < argc) && argv[optindex]) {
             ret = opt_default(NULL, opt, argv[optindex]);
             if (ret >= 0) {
                 av_log(NULL, AV_LOG_DEBUG, " matched as AVOption '%s' with "

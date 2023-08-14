@@ -24,8 +24,8 @@
 
 #include "ffmpeg.h"
 
-static int nb_hw_devices;
-static HWDevice **hw_devices;
+__thread int nb_hw_devices;
+__thread HWDevice **hw_devices;
 
 static HWDevice *hw_device_get_by_type(enum AVHWDeviceType type)
 {

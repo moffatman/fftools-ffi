@@ -33,6 +33,9 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+#include "opt_common.h"
+#include "fftools.h"
+
 #if HAVE_IO_H
 #include <io.h>
 #endif
@@ -108,9 +111,6 @@
 
 #include "libavutil/avassert.h"
 
-const char program_name[] = "ffmpeg";
-const int program_birth_year = 2000;
-
 static FILE *vstats_file;
 
 // optionally attached as opaque_ref to decoded AVFrames
@@ -131,30 +131,92 @@ static BenchmarkTimeStamps get_benchmark_time_stamps(void);
 static int64_t getmaxrss(void);
 static int ifilter_has_all_input_formats(FilterGraph *fg);
 
-static int64_t nb_frames_dup = 0;
-static uint64_t dup_warning = 1000;
-static int64_t nb_frames_drop = 0;
-static int64_t decode_error_stat[2];
-unsigned nb_output_dumped = 0;
+__thread int64_t nb_frames_dup = 0;
+__thread uint64_t dup_warning = 1000;
+__thread int64_t nb_frames_drop = 0;
+__thread int64_t decode_error_stat[2];
+__thread unsigned nb_output_dumped = 0;
 
-static BenchmarkTimeStamps current_time;
-AVIOContext *progress_avio = NULL;
+__thread BenchmarkTimeStamps current_time;
+__thread AVIOContext *progress_avio = NULL;
 
-InputFile   **input_files   = NULL;
-int        nb_input_files   = 0;
+__thread InputFile   **input_files   = NULL;
+__thread int        nb_input_files   = 0;
 
-OutputFile   **output_files   = NULL;
-int         nb_output_files   = 0;
+__thread OutputFile   **output_files   = NULL;
+__thread int         nb_output_files   = 0;
 
-FilterGraph **filtergraphs;
-int        nb_filtergraphs;
+__thread FilterGraph **filtergraphs;
+__thread int        nb_filtergraphs;
+
+__thread int64_t last_time = -1;
+__thread int64_t keyboard_last_time = 0;
+__thread int first_report = 1;
+__thread int qp_histogram[52];
+
+void (*report_callback)(int, float, float, int64_t, int, double, double) = NULL;
+
+extern __thread int file_overwrite;
+extern __thread int no_file_overwrite;
+extern __thread int ignore_unknown_streams;
+extern __thread int copy_unknown_streams;
+
+extern int opt_map(void *optctx, const char *opt, const char *arg);
+#ifdef FFMPEG_OPT_MAP_CHANNEL
+extern int opt_map_channel(void *optctx, const char *opt, const char *arg);
+#endif
+extern int opt_recording_timestamp(void *optctx, const char *opt, const char *arg);
+extern int opt_data_frames(void *optctx, const char *opt, const char *arg);
+extern int opt_progress(void *optctx, const char *opt, const char *arg);
+extern int opt_target(void *optctx, const char *opt, const char *arg);
+extern int opt_vsync(void *optctx, const char *opt, const char *arg);
+extern int opt_abort_on(void *optctx, const char *opt, const char *arg);
+extern int opt_stats_period(void *optctx, const char *opt, const char *arg);
+extern int opt_qscale(void *optctx, const char *opt, const char *arg);
+extern int opt_profile(void *optctx, const char *opt, const char *arg);
+extern int opt_filter_complex(void *optctx, const char *opt, const char *arg);
+extern int opt_filter_complex_script(void *optctx, const char *opt, const char *arg);
+extern int opt_attach(void *optctx, const char *opt, const char *arg);
+extern int opt_video_frames(void *optctx, const char *opt, const char *arg);
+extern int opt_video_codec(void *optctx, const char *opt, const char *arg);
+extern int opt_sameq(void *optctx, const char *opt, const char *arg);
+extern int opt_timecode(void *optctx, const char *opt, const char *arg);
+extern int opt_vstats_file(void *optctx, const char *opt, const char *arg);
+extern int opt_vstats(void *optctx, const char *opt, const char *arg);
+extern int opt_video_frames(void *optctx, const char *opt, const char *arg);
+extern int opt_old2new(void *optctx, const char *opt, const char *arg);
+extern int opt_streamid(void *optctx, const char *opt, const char *arg);
+extern int opt_bitrate(void *optctx, const char *opt, const char *arg);
+extern int show_hwaccels(void *optctx, const char *opt, const char *arg);
+extern int opt_video_filters(void *optctx, const char *opt, const char *arg);
+extern int opt_audio_frames(void *optctx, const char *opt, const char *arg);
+extern int opt_audio_qscale(void *optctx, const char *opt, const char *arg);
+extern int opt_audio_codec(void *optctx, const char *opt, const char *arg);
+extern int opt_channel_layout(void *optctx, const char *opt, const char *arg);
+extern int opt_preset(void *optctx, const char *opt, const char *arg);
+extern int opt_audio_filters(void *optctx, const char *opt, const char *arg);
+extern int opt_subtitle_codec(void *optctx, const char *opt, const char *arg);
+extern int opt_video_channel(void *optctx, const char *opt, const char *arg);
+extern int opt_video_standard(void *optctx, const char *opt, const char *arg);
+extern int opt_sdp_file(void *optctx, const char *opt, const char *arg);
+extern int opt_data_codec(void *optctx, const char *opt, const char *arg);
+extern int opt_init_hw_device(void *optctx, const char *opt, const char *arg);
+extern int opt_filter_hw_device(void *optctx, const char *opt, const char *arg);
+extern int opt_filter_threads(void *optctx, const char *opt, const char *arg);
+extern int opt_default_new(OptionsContext *o, const char *opt, const char *arg);
 
 #if HAVE_TERMIOS_H
 
 /* init terminal so that we can grab keys */
-static struct termios oldtty;
-static int restore_tty;
+__thread struct termios oldtty;
+__thread int restore_tty;
 #endif
+
+extern volatile int handleSIGQUIT;
+extern volatile int handleSIGINT;
+extern volatile int handleSIGTERM;
+extern volatile int handleSIGXCPU;
+extern volatile int handleSIGPIPE;
 
 /* sub2video hack:
    Convert subtitles to video with alpha to insert them in filter graphs.
@@ -329,24 +391,18 @@ void term_exit(void)
 
 static volatile int received_sigterm = 0;
 static volatile int received_nb_signals = 0;
-static atomic_int transcode_init_done = ATOMIC_VAR_INIT(0);
-static volatile int ffmpeg_exited = 0;
-int main_return_code = 0;
-static int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
+__thread atomic_int transcode_init_done = ATOMIC_VAR_INIT(0);
+__thread volatile int ffmpeg_exited = 0;
+__thread int main_ffmpeg_return_code = 0;
+__thread int64_t copy_ts_first_pts = AV_NOPTS_VALUE;
+extern __thread volatile int longjmp_value;
 
 static void
 sigterm_handler(int sig)
 {
-    int ret;
     received_sigterm = sig;
     received_nb_signals++;
     term_exit_sigsafe();
-    if(received_nb_signals > 3) {
-        ret = write(2/*STDERR_FILENO*/, "Received > 3 system signals, hard exiting\n",
-                    strlen("Received > 3 system signals, hard exiting\n"));
-        if (ret < 0) { /* Do nothing */ };
-        exit(123);
-    }
 }
 
 #if HAVE_SETCONSOLECTRLHANDLER
@@ -395,7 +451,11 @@ static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 void term_init(void)
 {
 #if defined __linux__
-    struct sigaction action = {0};
+    #if defined  __aarch64__ || defined __amd64__ || defined __x86_64__
+        struct sigaction action = {0};
+    #else
+        struct sigaction action = {{0}};
+    #endif
     action.sa_handler = sigterm_handler;
 
     /* block other interrupts while processing this one */
@@ -423,17 +483,27 @@ void term_init(void)
 
             tcsetattr (0, TCSANOW, &tty);
         }
-        SIGNAL(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
+        if (handleSIGQUIT == 1) {
+            signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
+        }
     }
 #endif
 
-    SIGNAL(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
-    SIGNAL(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
+    if (handleSIGINT == 1) {
+        signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
+    }
+    if (handleSIGTERM == 1) {
+        signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
+    }
 #ifdef SIGXCPU
-    SIGNAL(SIGXCPU, sigterm_handler);
+    if (handleSIGXCPU == 1) {
+        signal(SIGXCPU, sigterm_handler);
+    }
 #endif
 #ifdef SIGPIPE
-    signal(SIGPIPE, SIG_IGN); /* Broken pipe (POSIX). */
+    if (handleSIGPIPE == 1) {
+        signal(SIGPIPE, SIG_IGN); /* Broken pipe (POSIX). */
+    }
 #endif
 #if HAVE_SETCONSOLECTRLHANDLER
     SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE);
@@ -492,12 +562,14 @@ static int read_key(void)
     return -1;
 }
 
-static int decode_interrupt_cb(void *ctx)
+int decode_interrupt_cb(void *ctx);
+
+int decode_interrupt_cb(void *ctx)
 {
     return received_nb_signals > atomic_load(&transcode_init_done);
 }
 
-const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
+__thread const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
 
 static void ffmpeg_cleanup(int ret)
 {
@@ -576,6 +648,8 @@ static void ffmpeg_cleanup(int ret)
     if (received_sigterm) {
         av_log(NULL, AV_LOG_INFO, "Exiting normally, received signal %d.\n",
                (int) received_sigterm);
+    } else if (session->cancel_requested) {
+        av_log(NULL, AV_LOG_INFO, "Exiting normally, received cancel request.\n");
     } else if (ret && atomic_load(&transcode_init_done)) {
         av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
     }
@@ -1566,6 +1640,71 @@ static void print_final_stats(int64_t total_size)
     }
 }
 
+
+static void forward_report(int is_last_report, int64_t timer_start, int64_t cur_time)
+{
+    AVFormatContext *oc = NULL;
+    AVCodecContext *enc = NULL;
+    OutputStream *ost = NULL;
+    int64_t pts = INT64_MIN + 1;
+    int vid, i;
+
+    int frame_number = 0;
+    float fps = 0;
+    float quality = 0;
+    int64_t total_size = 0;
+    int seconds = 0;
+    double bitrate = 0.0;
+    double speed = 0.0;
+
+    float t = (cur_time-timer_start) / 1000000.0;
+
+    // 1. calculate size
+    total_size = of_filesize(output_files[0]);
+
+    vid = 0;
+    for (i = 0; i < output_files[0]->nb_streams; i++) {
+        ost = output_files[0]->streams[i];
+        enc = ost->enc_ctx;
+
+        if (enc) {
+
+            // 2. extract quality
+            quality = ost->quality / (float) FF_QP2LAMBDA;
+        }
+
+        if (!vid && enc->codec_type == AVMEDIA_TYPE_VIDEO) {
+
+            // 3. extract frame number
+            frame_number = ost->vsync_frame_number;
+
+            // 4. calculate fps
+            fps = t > 1 ? frame_number / t : 0;
+        }
+
+        // 5. calculate time
+        if (av_stream_get_end_pts(ost->st) != AV_NOPTS_VALUE)
+            pts = FFMAX(pts, av_rescale_q(av_stream_get_end_pts(ost->st),
+                                          ost->st->time_base, AV_TIME_BASE_Q));
+
+        vid = 1;
+    }
+
+    // 6. calculate time, with microseconds to milliseconds conversion
+    seconds = FFABS(pts) / 1000;
+
+    // 7. calculating kbit/s value
+    bitrate = pts && total_size >= 0 ? total_size * 8 / (pts / 1000.0) : -1;
+
+    // 9. calculate processing speed = processed stream duration/operation duration
+    speed = t != 0.0 ? (double)pts / AV_TIME_BASE / t : -1;
+
+    // FORWARD DATA
+    if (report_callback != NULL) {
+        report_callback(frame_number, fps, quality, total_size, seconds, bitrate, speed);
+    }
+}
+
 static void print_report(int is_last_report, int64_t timer_start, int64_t cur_time)
 {
     AVBPrint buf, buf_script;
@@ -1574,16 +1713,10 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     double bitrate;
     double speed;
     int64_t pts = INT64_MIN + 1;
-    static int64_t last_time = -1;
-    static int first_report = 1;
-    static int qp_histogram[52];
     int hours, mins, secs, us;
     const char *hours_sign;
     int ret;
     float t;
-
-    if (!print_stats && !is_last_report && !progress_avio)
-        return;
 
     if (!is_last_report) {
         if (last_time == -1) {
@@ -1594,6 +1727,11 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
             return;
         last_time = cur_time;
     }
+
+    forward_report(is_last_report, timer_start, cur_time);
+
+    if (!print_stats && !is_last_report && !progress_avio)
+        return;
 
     t = (cur_time-timer_start) / 1000000.0;
 
@@ -2061,7 +2199,10 @@ static int ifilter_send_eof(InputFilter *ifilter, int64_t pts)
     ifilter->eof = 1;
 
     if (ifilter->filter) {
-        ret = av_buffersrc_close(ifilter->filter, pts, AV_BUFFERSRC_FLAG_PUSH);
+        /* THIS VALIDATION IS REQUIRED TO COMPLETE CANCELLATION */
+        if (!received_sigterm && !session->cancel_requested) {
+            ret = av_buffersrc_close(ifilter->filter, pts, AV_BUFFERSRC_FLAG_PUSH);
+        }
         if (ret < 0)
             return ret;
     } else {
@@ -3514,13 +3655,12 @@ static void set_tty_echo(int on)
 static int check_keyboard_interaction(int64_t cur_time)
 {
     int i, ret, key;
-    static int64_t last_time;
     if (received_nb_signals)
         return AVERROR_EXIT;
     /* read_key() returns 0 on EOF */
-    if (cur_time - last_time >= 100000) {
+    if (cur_time - keyboard_last_time >= 100000) {
         key =  read_key();
-        last_time = cur_time;
+        keyboard_last_time = cur_time;
     }else
         key = -1;
     if (key == 'q') {
@@ -4022,7 +4162,7 @@ static int transcode(void)
 
     timer_start = av_gettime_relative();
 
-    while (!received_sigterm) {
+    while (!received_sigterm && !session->cancel_requested) {
         int64_t cur_time= av_gettime_relative();
 
         /* if 'q' pressed, exits */
@@ -4135,62 +4275,544 @@ static int64_t getmaxrss(void)
 #endif
 }
 
-int main(int argc, char **argv)
+void ffmpeg_var_cleanup(void);
+
+void ffmpeg_var_cleanup() {
+    main_ffmpeg_return_code = 0;
+    longjmp_value = 0;
+    received_sigterm = 0;
+    received_nb_signals = 0;
+    ffmpeg_exited = 0;
+    copy_ts_first_pts = AV_NOPTS_VALUE;
+
+    nb_frames_dup = 0;
+    dup_warning = 1000;
+    nb_frames_drop = 0;
+    nb_output_dumped = 0;
+
+    progress_avio = NULL;
+
+    input_files = NULL;
+    nb_input_files = 0;
+
+    output_files = NULL;
+    nb_output_files = 0;
+
+    filtergraphs = NULL;
+    nb_filtergraphs = 0;
+
+    last_time = -1;
+    keyboard_last_time = 0;
+    first_report = 1;
+}
+
+void set_report_callback(void (*callback)(int, float, float, int64_t, int, double, double))
 {
+    report_callback = callback;
+}
+
+__thread OptionDef *ffmpeg_options = NULL;
+
+int ffmpeg_execute(int argc, char **argv)
+{
+    char _program_name[] = "ffmpeg";
+    program_name = (char*)&_program_name;
+    program_birth_year = 2000;
+
+    #define OFFSET(x) offsetof(OptionsContext, x)
+    const OptionDef options[] = {
+        /* main options */
+        CMDUTILS_COMMON_OPTIONS
+        { "f",              HAS_ARG | OPT_STRING | OPT_OFFSET |
+                            OPT_INPUT | OPT_OUTPUT,                      { .off       = OFFSET(format) },
+            "force format", "fmt" },
+        { "y",              OPT_BOOL,                                    {              &file_overwrite },
+            "overwrite output files" },
+        { "n",              OPT_BOOL,                                    {              &no_file_overwrite },
+            "never overwrite output files" },
+        { "ignore_unknown", OPT_BOOL,                                    {              &ignore_unknown_streams },
+            "Ignore unknown stream types" },
+        { "copy_unknown",   OPT_BOOL | OPT_EXPERT,                       {              &copy_unknown_streams },
+            "Copy unknown stream types" },
+        { "recast_media",   OPT_BOOL | OPT_EXPERT,                       {              &recast_media },
+            "allow recasting stream type in order to force a decoder of different media type" },
+        { "c",              HAS_ARG | OPT_STRING | OPT_SPEC |
+                            OPT_INPUT | OPT_OUTPUT,                      { .off       = OFFSET(codec_names) },
+            "codec name", "codec" },
+        { "codec",          HAS_ARG | OPT_STRING | OPT_SPEC |
+                            OPT_INPUT | OPT_OUTPUT,                      { .off       = OFFSET(codec_names) },
+            "codec name", "codec" },
+        { "pre",            HAS_ARG | OPT_STRING | OPT_SPEC |
+                            OPT_OUTPUT,                                  { .off       = OFFSET(presets) },
+            "preset name", "preset" },
+        { "map",            HAS_ARG | OPT_EXPERT | OPT_PERFILE |
+                            OPT_OUTPUT,                                  { .func_arg = opt_map },
+            "set input stream mapping",
+            "[-]input_file_id[:stream_specifier][,sync_file_id[:stream_specifier]]" },
+    #if FFMPEG_OPT_MAP_CHANNEL
+        { "map_channel",    HAS_ARG | OPT_EXPERT | OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_map_channel },
+            "map an audio channel from one stream to another (deprecated)", "file.stream.channel[:syncfile.syncstream]" },
+    #endif
+        { "map_metadata",   HAS_ARG | OPT_STRING | OPT_SPEC |
+                            OPT_OUTPUT,                                  { .off       = OFFSET(metadata_map) },
+            "set metadata information of outfile from infile",
+            "outfile[,metadata]:infile[,metadata]" },
+        { "map_chapters",   HAS_ARG | OPT_INT | OPT_EXPERT | OPT_OFFSET |
+                            OPT_OUTPUT,                                  { .off = OFFSET(chapters_input_file) },
+            "set chapters mapping", "input_file_index" },
+        { "t",              HAS_ARG | OPT_TIME | OPT_OFFSET |
+                            OPT_INPUT | OPT_OUTPUT,                      { .off = OFFSET(recording_time) },
+            "record or transcode \"duration\" seconds of audio/video",
+            "duration" },
+        { "to",             HAS_ARG | OPT_TIME | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT,  { .off = OFFSET(stop_time) },
+            "record or transcode stop time", "time_stop" },
+        { "fs",             HAS_ARG | OPT_INT64 | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(limit_filesize) },
+            "set the limit file size in bytes", "limit_size" },
+        { "ss",             HAS_ARG | OPT_TIME | OPT_OFFSET |
+                            OPT_INPUT | OPT_OUTPUT,                      { .off = OFFSET(start_time) },
+            "set the start time offset", "time_off" },
+        { "sseof",          HAS_ARG | OPT_TIME | OPT_OFFSET |
+                            OPT_INPUT,                                   { .off = OFFSET(start_time_eof) },
+            "set the start time offset relative to EOF", "time_off" },
+        { "seek_timestamp", HAS_ARG | OPT_INT | OPT_OFFSET |
+                            OPT_INPUT,                                   { .off = OFFSET(seek_timestamp) },
+            "enable/disable seeking by timestamp with -ss" },
+        { "accurate_seek",  OPT_BOOL | OPT_OFFSET | OPT_EXPERT |
+                            OPT_INPUT,                                   { .off = OFFSET(accurate_seek) },
+            "enable/disable accurate seeking with -ss" },
+        { "isync",          HAS_ARG | OPT_INT | OPT_OFFSET |
+                            OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(input_sync_ref) },
+            "Indicate the input index for sync reference", "sync ref" },
+        { "itsoffset",      HAS_ARG | OPT_TIME | OPT_OFFSET |
+                            OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(input_ts_offset) },
+            "set the input ts offset", "time_off" },
+        { "itsscale",       HAS_ARG | OPT_DOUBLE | OPT_SPEC |
+                            OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(ts_scale) },
+            "set the input ts scale", "scale" },
+        { "timestamp",      HAS_ARG | OPT_PERFILE | OPT_OUTPUT,          { .func_arg = opt_recording_timestamp },
+            "set the recording timestamp ('now' to set the current time)", "time" },
+        { "metadata",       HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(metadata) },
+            "add metadata", "string=string" },
+        { "program",        HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(program) },
+            "add program with specified streams", "title=string:st=number..." },
+        { "dframes",        HAS_ARG | OPT_PERFILE | OPT_EXPERT |
+                            OPT_OUTPUT,                                  { .func_arg = opt_data_frames },
+            "set the number of data frames to output", "number" },
+        { "benchmark",      OPT_BOOL | OPT_EXPERT,                       { &do_benchmark },
+            "add timings for benchmarking" },
+        { "benchmark_all",  OPT_BOOL | OPT_EXPERT,                       { &do_benchmark_all },
+        "add timings for each task" },
+        { "progress",       HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_progress },
+        "write program-readable progress information", "url" },
+        { "stdin",          OPT_BOOL | OPT_EXPERT,                       { &stdin_interaction },
+        "enable or disable interaction on standard input" },
+        { "timelimit",      HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_timelimit },
+            "set max runtime in seconds in CPU user time", "limit" },
+        { "dump",           OPT_BOOL | OPT_EXPERT,                       { &do_pkt_dump },
+            "dump each input packet" },
+        { "hex",            OPT_BOOL | OPT_EXPERT,                       { &do_hex_dump },
+            "when dumping packets, also dump the payload" },
+        { "re",             OPT_BOOL | OPT_EXPERT | OPT_OFFSET |
+                            OPT_INPUT,                                   { .off = OFFSET(rate_emu) },
+            "read input at native frame rate; equivalent to -readrate 1", "" },
+        { "readrate",       HAS_ARG | OPT_FLOAT | OPT_OFFSET |
+                            OPT_EXPERT | OPT_INPUT,                      { .off = OFFSET(readrate) },
+            "read input at specified rate", "speed" },
+        { "target",         HAS_ARG | OPT_PERFILE | OPT_OUTPUT,          { .func_arg = opt_target },
+            "specify target file type (\"vcd\", \"svcd\", \"dvd\", \"dv\" or \"dv50\" "
+            "with optional prefixes \"pal-\", \"ntsc-\" or \"film-\")", "type" },
+        { "vsync",          HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_vsync },
+            "set video sync method globally; deprecated, use -fps_mode", "" },
+        { "frame_drop_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,      { &frame_drop_threshold },
+            "frame drop threshold", "" },
+        { "adrift_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,          { &audio_drift_threshold },
+            "audio drift threshold", "threshold" },
+        { "copyts",         OPT_BOOL | OPT_EXPERT,                       { &copy_ts },
+            "copy timestamps" },
+        { "start_at_zero",  OPT_BOOL | OPT_EXPERT,                       { &start_at_zero },
+            "shift input timestamps to start at 0 when using copyts" },
+        { "copytb",         HAS_ARG | OPT_INT | OPT_EXPERT,              { &copy_tb },
+            "copy input stream time base when stream copying", "mode" },
+        { "shortest",       OPT_BOOL | OPT_EXPERT | OPT_OFFSET |
+                            OPT_OUTPUT,                                  { .off = OFFSET(shortest) },
+            "finish encoding within shortest input" },
+        { "shortest_buf_duration", HAS_ARG | OPT_FLOAT | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(shortest_buf_duration) },
+            "maximum buffering duration (in seconds) for the -shortest option" },
+        { "bitexact",       OPT_BOOL | OPT_EXPERT | OPT_OFFSET |
+                            OPT_OUTPUT | OPT_INPUT,                      { .off = OFFSET(bitexact) },
+            "bitexact mode" },
+        { "apad",           OPT_STRING | HAS_ARG | OPT_SPEC |
+                            OPT_OUTPUT,                                  { .off = OFFSET(apad) },
+            "audio pad", "" },
+        { "dts_delta_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,       { &dts_delta_threshold },
+            "timestamp discontinuity delta threshold", "threshold" },
+        { "dts_error_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,       { &dts_error_threshold },
+            "timestamp error delta threshold", "threshold" },
+        { "xerror",         OPT_BOOL | OPT_EXPERT,                       { &exit_on_error },
+            "exit on error", "error" },
+        { "abort_on",       HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_abort_on },
+            "abort on the specified condition flags", "flags" },
+        { "copyinkf",       OPT_BOOL | OPT_EXPERT | OPT_SPEC |
+                            OPT_OUTPUT,                                  { .off = OFFSET(copy_initial_nonkeyframes) },
+            "copy initial non-keyframes" },
+        { "copypriorss",    OPT_INT | HAS_ARG | OPT_EXPERT | OPT_SPEC | OPT_OUTPUT,   { .off = OFFSET(copy_prior_start) },
+            "copy or discard frames before start time" },
+        { "frames",         OPT_INT64 | HAS_ARG | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(max_frames) },
+            "set the number of frames to output", "number" },
+        { "tag",            OPT_STRING | HAS_ARG | OPT_SPEC |
+                            OPT_EXPERT | OPT_OUTPUT | OPT_INPUT,         { .off = OFFSET(codec_tags) },
+            "force codec tag/fourcc", "fourcc/tag" },
+        { "q",              HAS_ARG | OPT_EXPERT | OPT_DOUBLE |
+                            OPT_SPEC | OPT_OUTPUT,                       { .off = OFFSET(qscale) },
+            "use fixed quality scale (VBR)", "q" },
+        { "qscale",         HAS_ARG | OPT_EXPERT | OPT_PERFILE |
+                            OPT_OUTPUT,                                  { .func_arg = opt_qscale },
+            "use fixed quality scale (VBR)", "q" },
+        { "profile",        HAS_ARG | OPT_EXPERT | OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_profile },
+            "set profile", "profile" },
+        { "filter",         HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(filters) },
+            "set stream filtergraph", "filter_graph" },
+        { "filter_threads", HAS_ARG,                                     { .func_arg = opt_filter_threads },
+            "number of non-complex filter threads" },
+        { "filter_script",  HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(filter_scripts) },
+            "read stream filtergraph description from a file", "filename" },
+        { "reinit_filter",  HAS_ARG | OPT_INT | OPT_SPEC | OPT_INPUT,    { .off = OFFSET(reinit_filters) },
+            "reinit filtergraph on input parameter changes", "" },
+        { "filter_complex", HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_filter_complex },
+            "create a complex filtergraph", "graph_description" },
+        { "filter_complex_threads", HAS_ARG | OPT_INT,                   { &filter_complex_nbthreads },
+            "number of threads for -filter_complex" },
+        { "lavfi",          HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_filter_complex },
+            "create a complex filtergraph", "graph_description" },
+        { "filter_complex_script", HAS_ARG | OPT_EXPERT,                 { .func_arg = opt_filter_complex_script },
+            "read complex filtergraph description from a file", "filename" },
+        { "auto_conversion_filters", OPT_BOOL | OPT_EXPERT,              { &auto_conversion_filters },
+            "enable automatic conversion filters globally" },
+        { "stats",          OPT_BOOL,                                    { &print_stats },
+            "print progress report during encoding", },
+        { "stats_period",    HAS_ARG | OPT_EXPERT,                       { .func_arg = opt_stats_period },
+            "set the period at which ffmpeg updates stats and -progress output", "time" },
+        { "attach",         HAS_ARG | OPT_PERFILE | OPT_EXPERT |
+                            OPT_OUTPUT,                                  { .func_arg = opt_attach },
+            "add an attachment to the output file", "filename" },
+        { "dump_attachment", HAS_ARG | OPT_STRING | OPT_SPEC |
+                            OPT_EXPERT | OPT_INPUT,                     { .off = OFFSET(dump_attachment) },
+            "extract an attachment into a file", "filename" },
+        { "stream_loop", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_INPUT |
+                            OPT_OFFSET,                                  { .off = OFFSET(loop) }, "set number of times input stream shall be looped", "loop count" },
+        { "debug_ts",       OPT_BOOL | OPT_EXPERT,                       { &debug_ts },
+            "print timestamp debugging info" },
+        { "max_error_rate",  HAS_ARG | OPT_FLOAT,                        { &max_error_rate },
+            "ratio of decoding errors (0.0: no errors, 1.0: 100% errors) above which ffmpeg returns an error instead of success.", "maximum error rate" },
+        { "discard",        OPT_STRING | HAS_ARG | OPT_SPEC |
+                            OPT_INPUT,                                   { .off = OFFSET(discard) },
+            "discard", "" },
+        { "disposition",    OPT_STRING | HAS_ARG | OPT_SPEC |
+                            OPT_OUTPUT,                                  { .off = OFFSET(disposition) },
+            "disposition", "" },
+        { "thread_queue_size", HAS_ARG | OPT_INT | OPT_OFFSET | OPT_EXPERT | OPT_INPUT | OPT_OUTPUT,
+                                                                        { .off = OFFSET(thread_queue_size) },
+            "set the maximum number of queued packets from the demuxer" },
+        { "find_stream_info", OPT_BOOL | OPT_INPUT | OPT_EXPERT | OPT_OFFSET, { .off = OFFSET(find_stream_info) },
+            "read and decode the streams to fill missing information with heuristics" },
+        { "bits_per_raw_sample", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_SPEC | OPT_OUTPUT,
+            { .off = OFFSET(bits_per_raw_sample) },
+            "set the number of bits per raw sample", "number" },
+
+        { "stats_enc_pre",      HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(enc_stats_pre)      },
+            "write encoding stats before encoding" },
+        { "stats_enc_post",     HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(enc_stats_post)     },
+            "write encoding stats after encoding" },
+        { "stats_mux_pre",      HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(mux_stats)          },
+            "write packets stats before muxing" },
+        { "stats_enc_pre_fmt",  HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(enc_stats_pre_fmt)  },
+            "format of the stats written with -stats_enc_pre" },
+        { "stats_enc_post_fmt", HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(enc_stats_post_fmt) },
+            "format of the stats written with -stats_enc_post" },
+        { "stats_mux_pre_fmt",  HAS_ARG | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT | OPT_STRING, { .off = OFFSET(mux_stats_fmt)      },
+            "format of the stats written with -stats_mux_pre" },
+
+        /* video options */
+        { "vframes",      OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_video_frames },
+            "set the number of video frames to output", "number" },
+        { "r",            OPT_VIDEO | HAS_ARG  | OPT_STRING | OPT_SPEC |
+                        OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(frame_rates) },
+            "set frame rate (Hz value, fraction or abbreviation)", "rate" },
+        { "fpsmax",       OPT_VIDEO | HAS_ARG  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(max_frame_rates) },
+            "set max frame rate (Hz value, fraction or abbreviation)", "rate" },
+        { "s",            OPT_VIDEO | HAS_ARG | OPT_SUBTITLE | OPT_STRING | OPT_SPEC |
+                        OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(frame_sizes) },
+            "set frame size (WxH or abbreviation)", "size" },
+        { "aspect",       OPT_VIDEO | HAS_ARG  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(frame_aspect_ratios) },
+            "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
+        { "pix_fmt",      OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                        OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(frame_pix_fmts) },
+            "set pixel format", "format" },
+        { "display_rotation", OPT_VIDEO | HAS_ARG | OPT_DOUBLE | OPT_SPEC |
+                            OPT_INPUT,                                             { .off = OFFSET(display_rotations) },
+            "set pure counter-clockwise rotation in degrees for stream(s)",
+            "angle" },
+        { "display_hflip", OPT_VIDEO | OPT_BOOL | OPT_SPEC | OPT_INPUT,              { .off = OFFSET(display_hflips) },
+            "set display horizontal flip for stream(s) "
+            "(overrides any display rotation if it is not set)"},
+        { "display_vflip", OPT_VIDEO | OPT_BOOL | OPT_SPEC | OPT_INPUT,              { .off = OFFSET(display_vflips) },
+            "set display vertical flip for stream(s) "
+            "(overrides any display rotation if it is not set)"},
+        { "vn",           OPT_VIDEO | OPT_BOOL  | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT,{ .off = OFFSET(video_disable) },
+            "disable video" },
+        { "rc_override",  OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(rc_overrides) },
+            "rate control override for specific intervals", "override" },
+        { "vcodec",       OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_INPUT |
+                        OPT_OUTPUT,                                                { .func_arg = opt_video_codec },
+            "force video codec ('copy' to copy stream)", "codec" },
+        { "timecode",     OPT_VIDEO | HAS_ARG | OPT_PERFILE | OPT_OUTPUT,            { .func_arg = opt_timecode },
+            "set initial TimeCode value.", "hh:mm:ss[:;.]ff" },
+        { "pass",         OPT_VIDEO | HAS_ARG | OPT_SPEC | OPT_INT | OPT_OUTPUT,     { .off = OFFSET(pass) },
+            "select the pass number (1 to 3)", "n" },
+        { "passlogfile",  OPT_VIDEO | HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(passlogfiles) },
+            "select two pass log file name prefix", "prefix" },
+    #if FFMPEG_OPT_PSNR
+        { "psnr",         OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_psnr },
+            "calculate PSNR of compressed frames (deprecated, use -flags +psnr)" },
+    #endif
+        { "vstats",       OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_vstats },
+            "dump video coding statistics to file" },
+        { "vstats_file",  OPT_VIDEO | HAS_ARG | OPT_EXPERT ,                         { .func_arg = opt_vstats_file },
+            "dump video coding statistics to file", "file" },
+        { "vstats_version",  OPT_VIDEO | OPT_INT | HAS_ARG | OPT_EXPERT ,            { &vstats_version },
+            "Version of the vstats format to use."},
+        { "vf",           OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_video_filters },
+            "set video filters", "filter_graph" },
+        { "intra_matrix", OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(intra_matrices) },
+            "specify intra matrix coeffs", "matrix" },
+        { "inter_matrix", OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(inter_matrices) },
+            "specify inter matrix coeffs", "matrix" },
+        { "chroma_intra_matrix", OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(chroma_intra_matrices) },
+            "specify intra matrix coeffs", "matrix" },
+        { "top",          OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_INT| OPT_SPEC |
+                        OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(top_field_first) },
+            "top=1/bottom=0/auto=-1 field first", "" },
+        { "vtag",         OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_PERFILE |
+                        OPT_INPUT | OPT_OUTPUT,                                    { .func_arg = opt_old2new },
+            "force video tag/fourcc", "fourcc/tag" },
+        { "qphist",       OPT_VIDEO | OPT_BOOL | OPT_EXPERT ,                        { &qp_hist },
+            "show QP histogram" },
+        { "fps_mode",     OPT_VIDEO | HAS_ARG | OPT_STRING | OPT_EXPERT |
+                        OPT_SPEC | OPT_OUTPUT,                                     { .off = OFFSET(fps_mode) },
+            "set framerate mode for matching video streams; overrides vsync" },
+        { "force_fps",    OPT_VIDEO | OPT_BOOL | OPT_EXPERT  | OPT_SPEC |
+                        OPT_OUTPUT,                                                { .off = OFFSET(force_fps) },
+            "force the selected framerate, disable the best supported framerate selection" },
+        { "streamid",     OPT_VIDEO | HAS_ARG | OPT_EXPERT | OPT_PERFILE |
+                        OPT_OUTPUT,                                                { .func_arg = opt_streamid },
+            "set the value of an outfile streamid", "streamIndex:value" },
+        { "force_key_frames", OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
+                            OPT_SPEC | OPT_OUTPUT,                                 { .off = OFFSET(forced_key_frames) },
+            "force key frames at specified timestamps", "timestamps" },
+        { "b",            OPT_VIDEO | HAS_ARG | OPT_PERFILE | OPT_OUTPUT,            { .func_arg = opt_bitrate },
+            "video bitrate (please use -b:v)", "bitrate" },
+        { "hwaccel",          OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
+                            OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccels) },
+            "use HW accelerated decoding", "hwaccel name" },
+        { "hwaccel_device",   OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
+                            OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccel_devices) },
+            "select a device for HW acceleration", "devicename" },
+        { "hwaccel_output_format", OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
+                            OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccel_output_formats) },
+            "select output format used with HW accelerated decoding", "format" },
+        { "hwaccels",         OPT_EXIT,                                              { .func_arg = show_hwaccels },
+            "show available HW acceleration methods" },
+        { "autorotate",       HAS_ARG | OPT_BOOL | OPT_SPEC |
+                            OPT_EXPERT | OPT_INPUT,                                { .off = OFFSET(autorotate) },
+            "automatically insert correct rotate filters" },
+        { "autoscale",        HAS_ARG | OPT_BOOL | OPT_SPEC |
+                            OPT_EXPERT | OPT_OUTPUT,                               { .off = OFFSET(autoscale) },
+            "automatically insert a scale filter at the end of the filter graph" },
+        { "fix_sub_duration_heartbeat", OPT_VIDEO | OPT_BOOL | OPT_EXPERT |
+                                        OPT_SPEC | OPT_OUTPUT,                       { .off = OFFSET(fix_sub_duration_heartbeat) },
+            "set this video output stream to be a heartbeat stream for "
+            "fix_sub_duration, according to which subtitles should be split at "
+            "random access points" },
+
+        /* audio options */
+        { "aframes",        OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_frames },
+            "set the number of audio frames to output", "number" },
+        { "aq",             OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_qscale },
+            "set audio quality (codec-specific)", "quality", },
+        { "ar",             OPT_AUDIO | HAS_ARG  | OPT_INT | OPT_SPEC |
+                            OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(audio_sample_rate) },
+            "set audio sampling rate (in Hz)", "rate" },
+        { "ac",             OPT_AUDIO | HAS_ARG  | OPT_INT | OPT_SPEC |
+                            OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(audio_channels) },
+            "set number of audio channels", "channels" },
+        { "an",             OPT_AUDIO | OPT_BOOL | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT,{ .off = OFFSET(audio_disable) },
+            "disable audio" },
+        { "acodec",         OPT_AUDIO | HAS_ARG  | OPT_PERFILE |
+                            OPT_INPUT | OPT_OUTPUT,                                    { .func_arg = opt_audio_codec },
+            "force audio codec ('copy' to copy stream)", "codec" },
+        { "ab",             OPT_AUDIO | HAS_ARG | OPT_PERFILE | OPT_OUTPUT,            { .func_arg = opt_bitrate },
+            "audio bitrate (please use -b:a)", "bitrate" },
+        { "atag",           OPT_AUDIO | HAS_ARG  | OPT_EXPERT | OPT_PERFILE |
+                            OPT_OUTPUT,                                                { .func_arg = opt_old2new },
+            "force audio tag/fourcc", "fourcc/tag" },
+        { "sample_fmt",     OPT_AUDIO | HAS_ARG  | OPT_EXPERT | OPT_SPEC |
+                            OPT_STRING | OPT_INPUT | OPT_OUTPUT,                       { .off = OFFSET(sample_fmts) },
+            "set sample format", "format" },
+        { "channel_layout", OPT_AUDIO | HAS_ARG  | OPT_EXPERT | OPT_SPEC |
+                            OPT_STRING | OPT_INPUT | OPT_OUTPUT,                       { .off = OFFSET(audio_ch_layouts) },
+            "set channel layout", "layout" },
+        { "ch_layout",      OPT_AUDIO | HAS_ARG  | OPT_EXPERT | OPT_SPEC |
+                            OPT_STRING | OPT_INPUT | OPT_OUTPUT,                       { .off = OFFSET(audio_ch_layouts) },
+            "set channel layout", "layout" },
+        { "af",             OPT_AUDIO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_audio_filters },
+            "set audio filters", "filter_graph" },
+        { "guess_layout_max", OPT_AUDIO | HAS_ARG | OPT_INT | OPT_SPEC | OPT_EXPERT | OPT_INPUT, { .off = OFFSET(guess_layout_max) },
+        "set the maximum number of channels to try to guess the channel layout" },
+
+        /* subtitle options */
+        { "sn",     OPT_SUBTITLE | OPT_BOOL | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(subtitle_disable) },
+            "disable subtitle" },
+        { "scodec", OPT_SUBTITLE | HAS_ARG  | OPT_PERFILE | OPT_INPUT | OPT_OUTPUT, { .func_arg = opt_subtitle_codec },
+            "force subtitle codec ('copy' to copy stream)", "codec" },
+        { "stag",   OPT_SUBTITLE | HAS_ARG  | OPT_EXPERT  | OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_old2new }
+            , "force subtitle tag/fourcc", "fourcc/tag" },
+        { "fix_sub_duration", OPT_BOOL | OPT_EXPERT | OPT_SUBTITLE | OPT_SPEC | OPT_INPUT, { .off = OFFSET(fix_sub_duration) },
+            "fix subtitles duration" },
+        { "canvas_size", OPT_SUBTITLE | HAS_ARG | OPT_STRING | OPT_SPEC | OPT_INPUT, { .off = OFFSET(canvas_sizes) },
+            "set canvas size (WxH or abbreviation)", "size" },
+
+        /* muxer options */
+        { "muxdelay",   OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_max_delay) },
+            "set the maximum demux-decode delay", "seconds" },
+        { "muxpreload", OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_preload) },
+            "set the initial demux-decode delay", "seconds" },
+        { "sdp_file", HAS_ARG | OPT_EXPERT | OPT_OUTPUT, { .func_arg = opt_sdp_file },
+            "specify a file in which to print sdp information", "file" },
+
+        { "time_base", HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(time_bases) },
+            "set the desired time base hint for output stream (1:24, 1:48000 or 0.04166, 2.0833e-5)", "ratio" },
+        { "enc_time_base", HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(enc_time_bases) },
+            "set the desired time base for the encoder (1:24, 1:48000 or 0.04166, 2.0833e-5). "
+            "two special values are defined - "
+            "0 = use frame rate (video) or sample rate (audio),"
+            "-1 = match source time base", "ratio" },
+
+        { "bsf", HAS_ARG | OPT_STRING | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(bitstream_filters) },
+            "A comma-separated list of bitstream filters", "bitstream_filters" },
+        { "absf", HAS_ARG | OPT_AUDIO | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_old2new },
+            "deprecated", "audio bitstream_filters" },
+        { "vbsf", OPT_VIDEO | HAS_ARG | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_old2new },
+            "deprecated", "video bitstream_filters" },
+
+        { "apre", HAS_ARG | OPT_AUDIO | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT,    { .func_arg = opt_preset },
+            "set the audio options to the indicated preset", "preset" },
+        { "vpre", OPT_VIDEO | HAS_ARG | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT,    { .func_arg = opt_preset },
+            "set the video options to the indicated preset", "preset" },
+        { "spre", HAS_ARG | OPT_SUBTITLE | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT, { .func_arg = opt_preset },
+            "set the subtitle options to the indicated preset", "preset" },
+        { "fpre", HAS_ARG | OPT_EXPERT| OPT_PERFILE | OPT_OUTPUT,                { .func_arg = opt_preset },
+            "set options from indicated preset file", "filename" },
+
+        { "max_muxing_queue_size", HAS_ARG | OPT_INT | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(max_muxing_queue_size) },
+            "maximum number of packets that can be buffered while waiting for all streams to initialize", "packets" },
+        { "muxing_queue_data_threshold", HAS_ARG | OPT_INT | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(muxing_queue_data_threshold) },
+            "set the threshold after which max_muxing_queue_size is taken into account", "bytes" },
+
+        /* data codec support */
+        { "dcodec", HAS_ARG | OPT_DATA | OPT_PERFILE | OPT_EXPERT | OPT_INPUT | OPT_OUTPUT, { .func_arg = opt_data_codec },
+            "force data codec ('copy' to copy stream)", "codec" },
+        { "dn", OPT_BOOL | OPT_VIDEO | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(data_disable) },
+            "disable data" },
+
+    #if CONFIG_VAAPI
+        { "vaapi_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_vaapi_device },
+            "set VAAPI hardware device (DRM path or X11 display name)", "device" },
+    #endif
+
+    #if CONFIG_QSV
+        { "qsv_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_qsv_device },
+            "set QSV hardware device (DirectX adapter index, DRM path or X11 display name)", "device"},
+    #endif
+
+        { "init_hw_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_init_hw_device },
+            "initialise hardware device", "args" },
+        { "filter_hw_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_filter_hw_device },
+            "set hardware device used when filtering", "device" },
+
+        { NULL, },
+    };
+
+    ffmpeg_options = options;
+
     int ret;
     BenchmarkTimeStamps ti;
 
-    init_dynload();
+    int savedCode = setjmp(session->ex_buf__);
+    if (savedCode == 0) {
 
-    register_exit(ffmpeg_cleanup);
+        ffmpeg_var_cleanup();
 
-    setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
+        init_dynload();
 
-    av_log_set_flags(AV_LOG_SKIP_REPEATED);
-    parse_loglevel(argc, argv, options);
+        register_exit(ffmpeg_cleanup);
 
-#if CONFIG_AVDEVICE
-    avdevice_register_all();
-#endif
-    avformat_network_init();
+        setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
 
-    show_banner(argc, argv, options);
+        av_log_set_flags(AV_LOG_SKIP_REPEATED);
+        parse_loglevel(argc, argv, options);
 
-    /* parse options and open all input/output files */
-    ret = ffmpeg_parse_options(argc, argv);
-    if (ret < 0)
-        exit_program(1);
+    #if CONFIG_AVDEVICE
+        avdevice_register_all();
+    #endif
+        avformat_network_init();
 
-    if (nb_output_files <= 0 && nb_input_files == 0) {
-        show_usage();
-        av_log(NULL, AV_LOG_WARNING, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
-        exit_program(1);
+        show_banner(argc, argv, options);
+
+        /* parse options and open all input/output files */
+        ret = ffmpeg_parse_options(argc, argv);
+        if (ret < 0)
+            exit_program(1);
+
+        if (nb_output_files <= 0 && nb_input_files == 0) {
+            show_usage();
+            av_log(NULL, AV_LOG_WARNING, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
+            exit_program(1);
+        }
+
+        /* file converter / grab */
+        if (nb_output_files <= 0) {
+            av_log(NULL, AV_LOG_FATAL, "At least one output file must be specified\n");
+            exit_program(1);
+        }
+
+        current_time = ti = get_benchmark_time_stamps();
+        if (transcode() < 0)
+            exit_program(1);
+        if (do_benchmark) {
+            int64_t utime, stime, rtime;
+            current_time = get_benchmark_time_stamps();
+            utime = current_time.user_usec - ti.user_usec;
+            stime = current_time.sys_usec  - ti.sys_usec;
+            rtime = current_time.real_usec - ti.real_usec;
+            av_log(NULL, AV_LOG_INFO,
+                "bench: utime=%0.3fs stime=%0.3fs rtime=%0.3fs\n",
+                utime / 1000000.0, stime / 1000000.0, rtime / 1000000.0);
+        }
+        av_log(NULL, AV_LOG_DEBUG, "%"PRIu64" frames successfully decoded, %"PRIu64" decoding errors\n",
+            decode_error_stat[0], decode_error_stat[1]);
+        if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
+            exit_program(69);
+
+        exit_program((received_nb_signals || session->cancel_requested)? 255 : main_ffmpeg_return_code);
+    } else {
+        main_ffmpeg_return_code = (received_nb_signals || session->cancel_requested) ? 255 : longjmp_value;
     }
-
-    /* file converter / grab */
-    if (nb_output_files <= 0) {
-        av_log(NULL, AV_LOG_FATAL, "At least one output file must be specified\n");
-        exit_program(1);
-    }
-
-    current_time = ti = get_benchmark_time_stamps();
-    if (transcode() < 0)
-        exit_program(1);
-    if (do_benchmark) {
-        int64_t utime, stime, rtime;
-        current_time = get_benchmark_time_stamps();
-        utime = current_time.user_usec - ti.user_usec;
-        stime = current_time.sys_usec  - ti.sys_usec;
-        rtime = current_time.real_usec - ti.real_usec;
-        av_log(NULL, AV_LOG_INFO,
-               "bench: utime=%0.3fs stime=%0.3fs rtime=%0.3fs\n",
-               utime / 1000000.0, stime / 1000000.0, rtime / 1000000.0);
-    }
-    av_log(NULL, AV_LOG_DEBUG, "%"PRIu64" frames successfully decoded, %"PRIu64" decoding errors\n",
-           decode_error_stat[0], decode_error_stat[1]);
-    if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
-        exit_program(69);
-
-    exit_program(received_nb_signals ? 255 : main_return_code);
-    return main_return_code;
+    return main_ffmpeg_return_code;
 }
