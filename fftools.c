@@ -33,9 +33,6 @@ static void fftools_statistics_callback_function(int frameNumber, float fps, flo
 typedef void (*log_callback_fp)(int level, char* message);
 typedef void (*statistics_callback_fp)(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed);
 
-log_callback_fp current_log_callback;
-statistics_callback_fp current_statistics_callback;
-
 static const char *avutil_log_get_level_str(int level) {
     switch (level) {
     case AV_LOG_STDERR:
@@ -190,8 +187,6 @@ typedef struct FFToolsArg {
 static void *ffmpeg_thread(void *arg) {
     FFToolsArg* toolsArg = arg;
     session = toolsArg->session;
-    current_log_callback = write_log_message_to_tq;
-    current_statistics_callback = write_statistics_message_to_tq;
     av_log_set_callback(fftools_log_callback_function);
     set_report_callback(fftools_statistics_callback_function);
     int ret = ffmpeg_execute(toolsArg->argc, toolsArg->argv);
@@ -234,8 +229,6 @@ int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_cal
 static void *ffprobe_thread(void *arg) {
     FFToolsArg* toolsArg = arg;
     session = toolsArg->session;
-    current_log_callback = write_log_message_to_tq;
-    current_statistics_callback = write_statistics_message_to_tq;
     av_log_set_callback(fftools_log_callback_function);
     set_report_callback(fftools_statistics_callback_function);
     int ret = ffprobe_execute(toolsArg->argc, toolsArg->argv);
@@ -299,9 +292,7 @@ void fftools_log_callback_function(void *ptr, int level, const char* format, va_
     av_bprintf(&fullLine, "%s%s%s%s", part[0].str, part[1].str, part[2].str, part[3].str);
 
     if (fullLine.len > 0) {
-        if (current_log_callback) {
-            current_log_callback(level, fullLine.str);
-        }
+        write_log_message_to_tq(level, fullLine.str);
     }
 
     av_bprint_finalize(part, NULL);
@@ -312,7 +303,5 @@ void fftools_log_callback_function(void *ptr, int level, const char* format, va_
 }
 
 static void fftools_statistics_callback_function(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed) {
-    if (current_statistics_callback) {
-        current_statistics_callback(frameNumber, fps, quality, size, time, bitrate, speed);
-    }
+    write_statistics_message_to_tq(frameNumber, fps, quality, size, time, bitrate, speed);
 }
