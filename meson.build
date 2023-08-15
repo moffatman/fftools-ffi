@@ -1,4 +1,4 @@
-project('ffmpeg-for-ffi', 'c', license: ['LGPL2.1+'])
+project('fftools-ffi', 'c', license: ['LGPL2.1+'])
 
 ffmpeg = [
 	dependency('libavformat'),
@@ -26,4 +26,4 @@ sources = [
 	'thread_queue.c'
 ]
 
-lib = library('ffmpeg-for-ffi', sources, dependencies: ffmpeg, install: true)
+lib = library('fftools-ffi', sources, dependencies: ffmpeg, install: true)
