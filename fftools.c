@@ -243,7 +243,7 @@ static void *ffprobe_thread(void *arg) {
     return (void*)(intptr_t)ret;
 }
 
-int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback, statistics_callback_fp statistics_callback) {
+int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback) {
     FFToolsArg arg;
     FFToolsSession session;
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
@@ -263,9 +263,6 @@ int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_ca
         }
         if (msg.type == THREADMESSAGE_LOG) {
             log_callback(msg.data.log_val.level, msg.data.log_val.message);
-        }
-        else {
-            statistics_callback(msg.data.stats_val.frameNumber, msg.data.stats_val.fps, msg.data.stats_val.quality, msg.data.stats_val.size, msg.data.stats_val.time, msg.data.stats_val.bitrate, msg.data.stats_val.speed);
         }
         reset_threadmessage(&msg);
     }
