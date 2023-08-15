@@ -615,7 +615,7 @@ static inline void writer_printf_printf(WriterContext *wctx, const char *fmt, ..
     va_list ap;
 
     va_start(ap, fmt);
-    vprintf(fmt, ap);
+    av_vlog(NULL, AV_LOG_STDERR, fmt, ap);
     va_end(ap);
 }
 
