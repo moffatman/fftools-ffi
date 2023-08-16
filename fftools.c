@@ -198,6 +198,7 @@ int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_cal
     FFToolsArg arg;
     FFToolsSession session;
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
+    session.cancel_requested = 0;
     session.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
     arg.argc = argc;
     arg.argv = argv;
@@ -240,6 +241,7 @@ int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_ca
     FFToolsArg arg;
     FFToolsSession session;
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
+    session.cancel_requested = 0;
     session.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
     arg.argc = argc;
     arg.argv = argv;
