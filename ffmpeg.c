@@ -162,6 +162,7 @@ extern __thread int file_overwrite;
 extern __thread int no_file_overwrite;
 extern __thread int ignore_unknown_streams;
 extern __thread int copy_unknown_streams;
+extern __thread int log_callback_report_print_prefix;
 
 extern int opt_map(void *optctx, const char *opt, const char *arg);
 #ifdef FFMPEG_OPT_MAP_CHANNEL
@@ -4306,6 +4307,7 @@ void ffmpeg_var_cleanup() {
     last_time = -1;
     keyboard_last_time = 0;
     first_report = 1;
+    log_callback_report_print_prefix = 1;
 }
 
 void set_report_callback(void (*callback)(int, float, float, int64_t, int, double, double))

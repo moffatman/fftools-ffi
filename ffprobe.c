@@ -136,6 +136,8 @@ __thread int show_optional_fields = SHOW_OPTIONAL_FIELDS_AUTO;
 __thread char *print_format;
 __thread char *stream_specifier;
 __thread char *show_data_hash;
+__thread int writers_initialized;
+extern __thread int log_callback_report_print_prefix;
 
 typedef struct ReadInterval {
     int id;             ///< identifier
@@ -325,18 +327,18 @@ typedef struct LogBuffer {
 
 __thread LogBuffer *log_buffer;
 __thread int log_buffer_size;
+__thread int log_callback_print_prefix;
 
 static void log_callback(void *ptr, int level, const char *fmt, va_list vl)
 {
     AVClass* avc = ptr ? *(AVClass **) ptr : NULL;
     va_list vl2;
     char line[1024];
-    static int print_prefix = 1;
     void *new_log_buffer;
 
     va_copy(vl2, vl);
     av_log_default_callback(ptr, level, fmt, vl);
-    av_log_format_line(ptr, level, fmt, vl2, line, sizeof(line), &print_prefix);
+    av_log_format_line(ptr, level, fmt, vl2, line, sizeof(line), &log_callback_print_prefix);
     va_end(vl2);
 
 #if HAVE_THREADS
@@ -1877,11 +1879,9 @@ static Writer xml_writer = {
 
 static void writer_register_all(void)
 {
-    static int initialized;
-
-    if (initialized)
+    if (writers_initialized)
         return;
-    initialized = 1;
+    writers_initialized = 1;
 
     writer_register(&default_writer);
     writer_register(&compact_writer);
@@ -4062,6 +4062,10 @@ void ffprobe_var_cleanup() {
 
     log_buffer = NULL;
     log_buffer_size = 0;
+    next_registered_writer_idx = 0;
+    writers_initialized = 0;
+    log_callback_print_prefix = 1;
+    log_callback_report_print_prefix = 1;
 }
 
 int ffprobe_execute(int argc, char **argv)
