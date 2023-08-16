@@ -27,3 +27,9 @@ sources = [
 ]
 
 lib = library('fftools-ffi', sources, dependencies: ffmpeg, install: true)
+ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], link_with: [
+	lib
+])
+ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], link_with: [
+	lib
+])
