@@ -4313,8 +4313,6 @@ void set_report_callback(void (*callback)(int, float, float, int64_t, int, doubl
     report_callback = callback;
 }
 
-__thread OptionDef *ffmpeg_options = NULL;
-
 int ffmpeg_execute(int argc, char **argv)
 {
     char _program_name[] = "ffmpeg";
@@ -4751,7 +4749,7 @@ int ffmpeg_execute(int argc, char **argv)
         { NULL, },
     };
 
-    ffmpeg_options = options;
+    session->options = options;
 
     int ret;
     BenchmarkTimeStamps ti;

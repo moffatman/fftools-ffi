@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <setjmp.h>
+#include "cmdutils.h"
 #include "thread_queue.h"
 
 typedef struct FFToolsSession {
@@ -10,6 +11,7 @@ typedef struct FFToolsSession {
     /** Holds information to implement exception handling. */
     jmp_buf ex_buf__;
     int cancel_requested;
+    OptionDef *options;
 } FFToolsSession;
 
 extern __thread FFToolsSession* session;

@@ -28,6 +28,7 @@
 #endif
 
 #include "ffmpeg.h"
+#include "fftools.h"
 #include "cmdutils.h"
 #include "opt_common.h"
 #include "sync_queue.h"
@@ -99,11 +100,9 @@ __thread int ignore_unknown_streams = 0;
 __thread int copy_unknown_streams = 0;
 __thread int recast_media = 0;
 
-extern __thread OptionDef *ffmpeg_options;
-
 static void uninit_options(OptionsContext *o)
 {
-    const OptionDef *po = ffmpeg_options;
+    const OptionDef *po = session->options;
     int i;
 
     /* all OPT_SPEC and OPT_STRING can be freed in generic way */
@@ -337,25 +336,25 @@ int opt_stats_period(void *optctx, const char *opt, const char *arg)
 int opt_audio_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "codec:a", arg, ffmpeg_options);
+    return parse_option(o, "codec:a", arg, session->options);
 }
 
 int opt_video_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "codec:v", arg, ffmpeg_options);
+    return parse_option(o, "codec:v", arg, session->options);
 }
 
 int opt_subtitle_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "codec:s", arg, ffmpeg_options);
+    return parse_option(o, "codec:s", arg, session->options);
 }
 
 int opt_data_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "codec:d", arg, ffmpeg_options);
+    return parse_option(o, "codec:d", arg, session->options);
 }
 
 int opt_map(void *optctx, const char *opt, const char *arg)
@@ -618,7 +617,7 @@ int opt_recording_timestamp(void *optctx, const char *opt, const char *arg)
     struct tm time = *gmtime((time_t*)&recording_timestamp);
     if (!strftime(buf, sizeof(buf), "creation_time=%Y-%m-%dT%H:%M:%S%z", &time))
         return -1;
-    parse_option(o, "metadata", buf, ffmpeg_options);
+    parse_option(o, "metadata", buf, session->options);
 
     av_log(NULL, AV_LOG_WARNING, "%s is deprecated, set the 'creation_time' metadata "
                                  "tag instead.\n", opt);
@@ -811,10 +810,10 @@ int opt_target(void *optctx, const char *opt, const char *arg)
     if (!strcmp(arg, "vcd")) {
         opt_video_codec(o, "c:v", "mpeg1video");
         opt_audio_codec(o, "c:a", "mp2");
-        parse_option(o, "f", "vcd", ffmpeg_options);
+        parse_option(o, "f", "vcd", session->options);
 
-        parse_option(o, "s", norm == PAL ? "352x288" : "352x240", ffmpeg_options);
-        parse_option(o, "r", frame_rates[norm], ffmpeg_options);
+        parse_option(o, "s", norm == PAL ? "352x288" : "352x240", session->options);
+        parse_option(o, "r", frame_rates[norm], session->options);
         opt_default(NULL, "g", norm == PAL ? "15" : "18");
 
         opt_default(NULL, "b:v", "1150000");
@@ -823,8 +822,8 @@ int opt_target(void *optctx, const char *opt, const char *arg)
         opt_default(NULL, "bufsize:v", "327680"); // 40*1024*8;
 
         opt_default(NULL, "b:a", "224000");
-        parse_option(o, "ar", "44100", ffmpeg_options);
-        parse_option(o, "ac", "2", ffmpeg_options);
+        parse_option(o, "ar", "44100", session->options);
+        parse_option(o, "ac", "2", session->options);
 
         opt_default(NULL, "packetsize", "2324");
         opt_default(NULL, "muxrate", "1411200"); // 2352 * 75 * 8;
@@ -839,11 +838,11 @@ int opt_target(void *optctx, const char *opt, const char *arg)
 
         opt_video_codec(o, "c:v", "mpeg2video");
         opt_audio_codec(o, "c:a", "mp2");
-        parse_option(o, "f", "svcd", ffmpeg_options);
+        parse_option(o, "f", "svcd", session->options);
 
-        parse_option(o, "s", norm == PAL ? "480x576" : "480x480", ffmpeg_options);
-        parse_option(o, "r", frame_rates[norm], ffmpeg_options);
-        parse_option(o, "pix_fmt", "yuv420p", ffmpeg_options);
+        parse_option(o, "s", norm == PAL ? "480x576" : "480x480", session->options);
+        parse_option(o, "r", frame_rates[norm], session->options);
+        parse_option(o, "pix_fmt", "yuv420p", session->options);
         opt_default(NULL, "g", norm == PAL ? "15" : "18");
 
         opt_default(NULL, "b:v", "2040000");
@@ -853,7 +852,7 @@ int opt_target(void *optctx, const char *opt, const char *arg)
         opt_default(NULL, "scan_offset", "1");
 
         opt_default(NULL, "b:a", "224000");
-        parse_option(o, "ar", "44100", ffmpeg_options);
+        parse_option(o, "ar", "44100", session->options);
 
         opt_default(NULL, "packetsize", "2324");
 
@@ -861,11 +860,11 @@ int opt_target(void *optctx, const char *opt, const char *arg)
 
         opt_video_codec(o, "c:v", "mpeg2video");
         opt_audio_codec(o, "c:a", "ac3");
-        parse_option(o, "f", "dvd", ffmpeg_options);
+        parse_option(o, "f", "dvd", session->options);
 
-        parse_option(o, "s", norm == PAL ? "720x576" : "720x480", ffmpeg_options);
-        parse_option(o, "r", frame_rates[norm], ffmpeg_options);
-        parse_option(o, "pix_fmt", "yuv420p", ffmpeg_options);
+        parse_option(o, "s", norm == PAL ? "720x576" : "720x480", session->options);
+        parse_option(o, "r", frame_rates[norm], session->options);
+        parse_option(o, "pix_fmt", "yuv420p", session->options);
         opt_default(NULL, "g", norm == PAL ? "15" : "18");
 
         opt_default(NULL, "b:v", "6000000");
@@ -877,19 +876,19 @@ int opt_target(void *optctx, const char *opt, const char *arg)
         opt_default(NULL, "muxrate", "10080000"); // from mplex project: data_rate = 1260000. mux_rate = data_rate * 8
 
         opt_default(NULL, "b:a", "448000");
-        parse_option(o, "ar", "48000", ffmpeg_options);
+        parse_option(o, "ar", "48000", session->options);
 
     } else if (!strncmp(arg, "dv", 2)) {
 
-        parse_option(o, "f", "dv", ffmpeg_options);
+        parse_option(o, "f", "dv", session->options);
 
-        parse_option(o, "s", norm == PAL ? "720x576" : "720x480", ffmpeg_options);
+        parse_option(o, "s", norm == PAL ? "720x576" : "720x480", session->options);
         parse_option(o, "pix_fmt", !strncmp(arg, "dv50", 4) ? "yuv422p" :
-                          norm == PAL ? "yuv420p" : "yuv411p", ffmpeg_options);
-        parse_option(o, "r", frame_rates[norm], ffmpeg_options);
+                          norm == PAL ? "yuv420p" : "yuv411p", session->options);
+        parse_option(o, "r", frame_rates[norm], session->options);
 
-        parse_option(o, "ar", "48000", ffmpeg_options);
-        parse_option(o, "ac", "2", ffmpeg_options);
+        parse_option(o, "ar", "48000", session->options);
+        parse_option(o, "ac", "2", session->options);
 
     } else {
         av_log(NULL, AV_LOG_ERROR, "Unknown target: %s\n", arg);
@@ -928,19 +927,19 @@ int opt_vstats(void *optctx, const char *opt, const char *arg)
 int opt_video_frames(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "frames:v", arg, ffmpeg_options);
+    return parse_option(o, "frames:v", arg, session->options);
 }
 
 int opt_audio_frames(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "frames:a", arg, ffmpeg_options);
+    return parse_option(o, "frames:a", arg, session->options);
 }
 
 int opt_data_frames(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "frames:d", arg, ffmpeg_options);
+    return parse_option(o, "frames:d", arg, session->options);
 }
 
 int opt_default_new(OptionsContext *o, const char *opt, const char *arg)
@@ -1018,7 +1017,7 @@ int opt_old2new(void *optctx, const char *opt, const char *arg)
     char *s = av_asprintf("%s:%c", opt + 1, *opt);
     if (!s)
         return AVERROR(ENOMEM);
-    ret = parse_option(o, s, arg, ffmpeg_options);
+    ret = parse_option(o, s, arg, session->options);
     av_free(s);
     return ret;
 }
@@ -1046,12 +1045,12 @@ int opt_qscale(void *optctx, const char *opt, const char *arg)
     int ret;
     if(!strcmp(opt, "qscale")){
         av_log(NULL, AV_LOG_WARNING, "Please use -q:a or -q:v, -qscale is ambiguous\n");
-        return parse_option(o, "q:v", arg, ffmpeg_options);
+        return parse_option(o, "q:v", arg, session->options);
     }
     s = av_asprintf("q%s", opt + 6);
     if (!s)
         return AVERROR(ENOMEM);
-    ret = parse_option(o, s, arg, ffmpeg_options);
+    ret = parse_option(o, s, arg, session->options);
     av_free(s);
     return ret;
 }
@@ -1071,13 +1070,13 @@ int opt_profile(void *optctx, const char *opt, const char *arg)
 int opt_video_filters(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "filter:v", arg, ffmpeg_options);
+    return parse_option(o, "filter:v", arg, session->options);
 }
 
 int opt_audio_filters(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "filter:a", arg, ffmpeg_options);
+    return parse_option(o, "filter:a", arg, session->options);
 }
 
 int opt_vsync(void *optctx, const char *opt, const char *arg)
@@ -1094,7 +1093,7 @@ int opt_timecode(void *optctx, const char *opt, const char *arg)
     char *tcr = av_asprintf("timecode=%s", arg);
     if (!tcr)
         return AVERROR(ENOMEM);
-    ret = parse_option(o, "metadata:g", tcr, ffmpeg_options);
+    ret = parse_option(o, "metadata:g", tcr, session->options);
     if (ret >= 0)
         ret = av_dict_set(&o->g->codec_opts, "gop_timecode", arg, 0);
     av_free(tcr);
@@ -1104,7 +1103,7 @@ int opt_timecode(void *optctx, const char *opt, const char *arg)
 int opt_audio_qscale(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    return parse_option(o, "q:a", arg, ffmpeg_options);
+    return parse_option(o, "q:a", arg, session->options);
 }
 
 int opt_filter_complex(void *optctx, const char *opt, const char *arg)
@@ -1158,35 +1157,35 @@ void show_help_default_ffmpeg(const char *opt, const char *arg)
            "    See man %s for detailed description of the options.\n"
            "\n", program_name);
 
-    show_help_options(ffmpeg_options, "Print help / information / capabilities:",
+    show_help_options(session->options, "Print help / information / capabilities:",
                       OPT_EXIT, 0, 0);
 
-    show_help_options(ffmpeg_options, "Global options (affect whole program "
+    show_help_options(session->options, "Global options (affect whole program "
                       "instead of just one file):",
                       0, per_file | OPT_EXIT | OPT_EXPERT, 0);
     if (show_advanced)
-        show_help_options(ffmpeg_options, "Advanced global options:", OPT_EXPERT,
+        show_help_options(session->options, "Advanced global options:", OPT_EXPERT,
                           per_file | OPT_EXIT, 0);
 
-    show_help_options(ffmpeg_options, "Per-file main options:", 0,
+    show_help_options(session->options, "Per-file main options:", 0,
                       OPT_EXPERT | OPT_AUDIO | OPT_VIDEO | OPT_SUBTITLE |
                       OPT_EXIT, per_file);
     if (show_advanced)
-        show_help_options(ffmpeg_options, "Advanced per-file options:",
+        show_help_options(session->options, "Advanced per-file options:",
                           OPT_EXPERT, OPT_AUDIO | OPT_VIDEO | OPT_SUBTITLE, per_file);
 
-    show_help_options(ffmpeg_options, "Video options:",
+    show_help_options(session->options, "Video options:",
                       OPT_VIDEO, OPT_EXPERT | OPT_AUDIO, 0);
     if (show_advanced)
-        show_help_options(ffmpeg_options, "Advanced Video options:",
+        show_help_options(session->options, "Advanced Video options:",
                           OPT_EXPERT | OPT_VIDEO, OPT_AUDIO, 0);
 
-    show_help_options(ffmpeg_options, "Audio options:",
+    show_help_options(session->options, "Audio options:",
                       OPT_AUDIO, OPT_EXPERT | OPT_VIDEO, 0);
     if (show_advanced)
-        show_help_options(ffmpeg_options, "Advanced Audio options:",
+        show_help_options(session->options, "Advanced Audio options:",
                           OPT_EXPERT | OPT_AUDIO, OPT_VIDEO, 0);
-    show_help_options(ffmpeg_options, "Subtitle options:",
+    show_help_options(session->options, "Subtitle options:",
                       OPT_SUBTITLE, 0, 0);
     av_log(NULL, AV_LOG_STDERR, "\n");
 
@@ -1264,7 +1263,7 @@ int ffmpeg_parse_options(int argc, char **argv)
     memset(&octx, 0, sizeof(octx));
 
     /* split the commandline into an internal representation */
-    ret = split_commandline(&octx, argc, argv, ffmpeg_options, groups,
+    ret = split_commandline(&octx, argc, argv, session->options, groups,
                             FF_ARRAY_ELEMS(groups));
     if (ret < 0) {
         av_log(NULL, AV_LOG_FATAL, "Error splitting the argument list: ");

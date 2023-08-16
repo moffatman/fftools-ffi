@@ -276,8 +276,6 @@ static struct section sections[] = {
     [SECTION_ID_SUBTITLE] =           { SECTION_ID_SUBTITLE, "subtitle", 0, { -1 } },
 };
 
-__thread OptionDef *ffprobe_options = NULL;
-
 /* FFprobe context */
 __thread const char *input_filename;
 __thread const char *print_input_filename;
@@ -3776,7 +3774,7 @@ static int opt_print_filename(void *optctx, const char *opt, const char *arg)
 void show_help_default_ffprobe(const char *opt, const char *arg)
 {
     show_usage();
-    show_help_options(ffprobe_options, "Main options:", 0, 0, 0);
+    show_help_options(session->options, "Main options:", 0, 0, 0);
     av_log(NULL, AV_LOG_STDERR, "\n");
 
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -4049,8 +4047,6 @@ void ffprobe_var_cleanup() {
     read_intervals_nb = 0;
     find_stream_info  = 1;
 
-    ffprobe_options = NULL;
-
     input_filename = NULL;
     print_input_filename = NULL;
     iformat = NULL;
@@ -4177,7 +4173,7 @@ int ffprobe_execute(int argc, char **argv)
         av_log_set_flags(AV_LOG_SKIP_REPEATED);
         register_exit(ffprobe_cleanup);
 
-        ffprobe_options = options;
+        session->options = options;
         parse_loglevel(argc, argv, options);
         avformat_network_init();
     #if CONFIG_AVDEVICE
