@@ -731,7 +731,6 @@ int split_commandline(OptionParseContext *octx, int argc, char *argv[],
 
 #define GET_ARG(arg)                                                           \
 do {                                                                           \
-    arg = argv[optindex++];                                                    \
     if (optindex < argc) {                                                     \
         arg = argv[optindex++];                                                \
     } else {                                                                   \
