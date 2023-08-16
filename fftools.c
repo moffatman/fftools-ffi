@@ -214,9 +214,11 @@ int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_cal
             break;
         }
         if (msg.type == THREADMESSAGE_LOG) {
-            log_callback(msg.data.log_val.level, msg.data.log_val.message);
+            if (log_callback) {
+                log_callback(msg.data.log_val.level, msg.data.log_val.message);
+            }
         }
-        else {
+        else if (statistics_callback) {
             statistics_callback(msg.data.stats_val.frameNumber, msg.data.stats_val.fps, msg.data.stats_val.quality, msg.data.stats_val.size, msg.data.stats_val.time, msg.data.stats_val.bitrate, msg.data.stats_val.speed);
         }
         reset_threadmessage(&msg);
@@ -256,7 +258,7 @@ int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_ca
             // End of data - conversion done
             break;
         }
-        if (msg.type == THREADMESSAGE_LOG) {
+        if (msg.type == THREADMESSAGE_LOG && log_callback) {
             log_callback(msg.data.log_val.level, msg.data.log_val.message);
         }
         reset_threadmessage(&msg);
