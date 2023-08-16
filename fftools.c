@@ -208,8 +208,8 @@ int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_cal
     while (1) {
         ThreadMessage msg;
         int stream_idx;
-        tq_receive(session.tq, &stream_idx, &msg); // TODO: Check return value
-        if (stream_idx < 0) {
+        int tq_ret = tq_receive(session.tq, &stream_idx, &msg);
+        if (stream_idx < 0 || tq_ret == AVERROR_EOF) {
             // End of data - conversion done
             break;
         }
@@ -251,8 +251,8 @@ int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_ca
     while (1) {
         ThreadMessage msg;
         int stream_idx;
-        tq_receive(session.tq, &stream_idx, &msg); // TODO: Check return value
-        if (stream_idx < 0) {
+        int tq_ret = tq_receive(session.tq, &stream_idx, &msg);
+        if (stream_idx < 0 || tq_ret == AVERROR_EOF) {
             // End of data - conversion done
             break;
         }
