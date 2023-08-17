@@ -1666,7 +1666,6 @@ static void print_final_stats(int64_t total_size)
 
 static void forward_report(int is_last_report, int64_t timer_start, int64_t cur_time)
 {
-    AVFormatContext *oc = NULL;
     AVCodecContext *enc = NULL;
     OutputStream *ost = NULL;
     int64_t pts = INT64_MIN + 1;
@@ -2157,6 +2156,8 @@ static int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_ref
         need_reinit |= ifilter->width  != frame->width ||
                        ifilter->height != frame->height;
         break;
+    default:
+        break;
     }
 
     if (!ifilter->ist->reinit_filters && fg->graph)
@@ -2166,7 +2167,7 @@ static int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_ref
         (ifilter->hw_frames_ctx && ifilter->hw_frames_ctx->data != frame->hw_frames_ctx->data))
         need_reinit = 1;
 
-    if (sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX)) {
+    if ((sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX))) {
         if (!ifilter->displaymatrix || memcmp(sd->data, ifilter->displaymatrix, sizeof(int32_t) * 9))
             need_reinit = 1;
     } else if (ifilter->displaymatrix)
@@ -2217,7 +2218,7 @@ static int ifilter_send_frame(InputFilter *ifilter, AVFrame *frame, int keep_ref
 
 static int ifilter_send_eof(InputFilter *ifilter, int64_t pts)
 {
-    int ret;
+    int ret = 0;
 
     ifilter->eof = 1;
 
@@ -2888,6 +2889,8 @@ static int process_input_packet(InputStream *ist, const AVPacket *pkt, int no_eo
                                   ist->dec_ctx->framerate.num / ist->dec_ctx->ticks_per_frame;
             }
             break;
+        default:
+            break;
         }
         ist->pts = ist->dts;
         ist->next_pts = ist->next_dts;
@@ -3135,6 +3138,8 @@ static int init_output_stream_streamcopy(OutputStream *ost)
         ost->st->sample_aspect_ratio = par->sample_aspect_ratio = sar;
         ost->st->avg_frame_rate = ist->st->avg_frame_rate;
         ost->st->r_frame_rate = ist->st->r_frame_rate;
+        break;
+    default:
         break;
     }
 

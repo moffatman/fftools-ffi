@@ -954,7 +954,7 @@ int show_colors(void *optctx, const char *opt, const char *arg)
 
     av_log(NULL, AV_LOG_STDERR, "%-32s #RRGGBB\n", "name");
 
-    for (i = 0; name = av_get_known_color_name(i, &rgb); i++)
+    for (i = 0; (name = av_get_known_color_name(i, &rgb)); i++)
         av_log(NULL, AV_LOG_STDERR, "%-32s #%02x%02x%02x\n", name, rgb[0], rgb[1], rgb[2]);
 
     return 0;
@@ -1016,7 +1016,7 @@ int show_layouts(void *optctx, const char *opt, const char *arg)
     }
     av_log(NULL, AV_LOG_STDERR, "\nStandard channel layouts:\n"
            "NAME           DECOMPOSITION\n");
-    while (ch_layout = av_channel_layout_standard(&iter)) {
+    while ((ch_layout = av_channel_layout_standard(&iter))) {
             av_channel_layout_describe(ch_layout, buf, sizeof(buf));
             av_log(NULL, AV_LOG_STDERR, "%-14s ", buf);
             for (i = 0; i < 63; i++) {

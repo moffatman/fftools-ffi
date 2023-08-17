@@ -230,7 +230,7 @@ static void correct_input_start_times(void)
             if (copy_ts && start_at_zero)
                 ifile->ts_offset = -new_start_time;
             else if (!copy_ts) {
-                abs_start_seek = is->start_time + (ifile->start_time != AV_NOPTS_VALUE) ? ifile->start_time : 0;
+                abs_start_seek = is->start_time + ((ifile->start_time != AV_NOPTS_VALUE) ? ifile->start_time : 0);
                 ifile->ts_offset = abs_start_seek > new_start_time ? -abs_start_seek : -new_start_time;
             } else if (copy_ts)
                 ifile->ts_offset = 0;
@@ -378,7 +378,7 @@ int opt_map(void *optctx, const char *opt, const char *arg)
 
 #if FFMPEG_OPT_MAP_SYNC
     /* parse sync stream first, just pick first matching stream */
-    if (sync = strchr(map, ',')) {
+    if ((sync = strchr(map, ','))) {
         *sync = 0;
         av_log(NULL, AV_LOG_WARNING, "Specifying a sync stream is deprecated and has no effect\n");
     }
@@ -396,7 +396,7 @@ int opt_map(void *optctx, const char *opt, const char *arg)
             exit_program(1);
         }
     } else {
-        if (allow_unused = strchr(map, '?'))
+        if ((allow_unused = strchr(map, '?')))
             *allow_unused = 0;
         file_idx = strtol(map, &p, 0);
         if (file_idx >= nb_input_files || file_idx < 0) {
@@ -521,7 +521,7 @@ int opt_map_channel(void *optctx, const char *opt, const char *arg)
         exit_program(1);
     }
     /* allow trailing ? to map_channel */
-    if (allow_unused = strchr(mapchan, '?'))
+    if ((allow_unused = strchr(mapchan, '?')))
         *allow_unused = 0;
     if (m->channel_idx < 0 || m->channel_idx >= st->codecpar->ch_layout.nb_channels ||
         input_files[m->file_idx]->streams[m->stream_idx]->user_set_discard == AVDISCARD_ALL) {

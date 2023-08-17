@@ -3091,7 +3091,7 @@ static int show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_id
 
     if (dec_ctx && dec_ctx->codec->priv_class && show_private_data) {
         const AVOption *opt = NULL;
-        while (opt = av_opt_next(dec_ctx->priv_data,opt)) {
+        while ((opt = av_opt_next(dec_ctx->priv_data,opt))) {
             uint8_t *str;
             if (!(opt->flags & AV_OPT_FLAG_EXPORT)) continue;
             if (av_opt_get(dec_ctx->priv_data, opt->name, 0, &str) >= 0) {

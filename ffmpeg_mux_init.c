@@ -1258,9 +1258,9 @@ static void map_auto_subtitle(Muxer *mux, const OptionsContext *o)
             if (subtitle_codec_name ||
                 input_props & output_props ||
                 // Map dvb teletext which has neither property to any output subtitle encoder
-                input_descriptor && output_descriptor &&
-                (!input_descriptor->props ||
-                 !output_descriptor->props)) {
+                (input_descriptor && output_descriptor &&
+                 (!input_descriptor->props ||
+                  !output_descriptor->props))) {
                 new_subtitle_stream(mux, o, ist);
                 break;
             }
@@ -1418,6 +1418,7 @@ static void create_streams(Muxer *mux, const OptionsContext *o)
             case AVMEDIA_TYPE_VIDEO:    auto_disable_v = 1; break;
             case AVMEDIA_TYPE_AUDIO:    auto_disable_a = 1; break;
             case AVMEDIA_TYPE_SUBTITLE: auto_disable_s = 1; break;
+            default: break;
             }
             init_output_filter(ofilter, o, mux);
         }
@@ -2328,6 +2329,8 @@ int of_open(const OptionsContext *o, const char *filename)
                 } else if (c->ch_layouts) {
                     f->ch_layouts = c->ch_layouts;
                 }
+                break;
+            default:
                 break;
             }
         }

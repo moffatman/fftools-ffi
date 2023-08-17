@@ -19,4 +19,5 @@
 #elif __APPLE__ || __ANDROID__ || __linux__ || __unix__ || defined(_POSIX_VERSION)
     #define HAVE_PTHREADS 1
 #endif
+#define HAVE_THREADS 1
 #endif /* FFMPEG_CONFIG_H */

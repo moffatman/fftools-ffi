@@ -177,7 +177,7 @@ void show_help_children(const AVClass *class, int flags)
         av_log(NULL, AV_LOG_STDERR, "\n");
     }
 
-    while (child = av_opt_child_class_iterate(class, &iter))
+    while ((child = av_opt_child_class_iterate(class, &iter)))
         show_help_children(child, flags);
 }
 
@@ -900,9 +900,11 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
         prefix  = 's';
         flags  |= AV_OPT_FLAG_SUBTITLE_PARAM;
         break;
+    default:
+        break;
     }
 
-    while (t = av_dict_iterate(opts, t)) {
+    while ((t = av_dict_iterate(opts, t))) {
         const AVClass *priv_class;
         char *p = strchr(t->key, ':');
 

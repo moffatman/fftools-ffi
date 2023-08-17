@@ -531,7 +531,7 @@ static const AVCodec *choose_decoder(const OptionsContext *o, AVFormatContext *s
                     !av_codec_is_decoder(c))
                     continue;
 
-                for (int j = 0; config = avcodec_get_hw_config(c, j); j++) {
+                for (int j = 0; (config = avcodec_get_hw_config(c, j)); j++) {
                     if (config->device_type == hwaccel_device_type) {
                         av_log(NULL, AV_LOG_VERBOSE, "Selecting decoder '%s' because of requested hwaccel method %s\n",
                                c->name, av_hwdevice_get_type_name(hwaccel_device_type));
