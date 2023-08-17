@@ -1676,7 +1676,7 @@ static void forward_report(int is_last_report, int64_t timer_start, int64_t cur_
             quality = ost->quality / (float) FF_QP2LAMBDA;
         }
 
-        if (!vid && enc->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if (!vid && enc && enc->codec_type == AVMEDIA_TYPE_VIDEO) {
 
             // 3. extract frame number
             frame_number = ost->vsync_frame_number;
