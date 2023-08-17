@@ -171,7 +171,7 @@ void write_log_message_to_tq(int level, char* message) {
 
 void write_statistics_message_to_tq(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed) {
     if (!session) {
-        fprintf(stderr, "No way to forward stats with frameNumber %d, fps %f, quality %f, size %ld, time %d, bitrate %f, speed %f\n", frameNumber, fps, quality, size, time, bitrate, speed);
+        fprintf(stderr, "No way to forward stats with frameNumber %d, fps %f, quality %f, size %lld, time %d, bitrate %f, speed %f\n", frameNumber, fps, quality, size, time, bitrate, speed);
         return;
     }
     ThreadMessage data;
