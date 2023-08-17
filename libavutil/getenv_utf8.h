@@ -22,7 +22,6 @@
 #include <stdlib.h>
 
 #include "config.h"
-#include "mem.h"
 
 #if HAVE_GETENV && defined(_WIN32)
 

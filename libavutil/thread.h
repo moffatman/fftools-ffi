@@ -28,8 +28,6 @@
 #include <sys/prctl.h>
 #endif
 
-#include "error.h"
-
 #if HAVE_PTHREADS || HAVE_W32THREADS || HAVE_OS2THREADS
 
 #if HAVE_PTHREADS

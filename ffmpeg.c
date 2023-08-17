@@ -54,23 +54,19 @@
 #include "libavutil/samplefmt.h"
 #include "libavutil/fifo.h"
 #include "libavutil/hwcontext.h"
-#include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
 #include "libavutil/display.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
-#include "libavutil/libm.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/timestamp.h"
 #include "libavutil/bprint.h"
 #include "libavutil/time.h"
 #include "libavutil/thread.h"
 #include "libavutil/threadmessage.h"
-#include "libavcodec/mathops.h"
 #include "libavcodec/version.h"
-#include "libavformat/os_support.h"
 
 # include "libavfilter/avfilter.h"
 # include "libavfilter/buffersrc.h"
@@ -112,6 +108,30 @@
 #include "sync_queue.h"
 
 #include "libavutil/avassert.h"
+
+/* Copied from libavutil/internal.h */
+#ifdef DEBUG
+#   define ff_dlog(ctx, ...) av_log(ctx, AV_LOG_DEBUG, __VA_ARGS__)
+#else
+#   define ff_dlog(ctx, ...) do { if (0) av_log(ctx, AV_LOG_DEBUG, __VA_ARGS__); } while (0)
+#endif
+
+/* Copied from libavcodec/math_ops.h */
+static inline av_const int mid_pred(int a, int b, int c)
+{
+    if(a>b){
+        if(c>b){
+            if(c>a) b=a;
+            else    b=c;
+        }
+    }else{
+        if(b>c){
+            if(c>a) b=c;
+            else    b=a;
+        }
+    }
+    return b;
+}
 
 static FILE *vstats_file;
 

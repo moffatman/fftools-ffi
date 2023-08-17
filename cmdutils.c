@@ -43,7 +43,6 @@
 #include "libavutil/getenv_utf8.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/imgutils.h"
-#include "libavutil/libm.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/eval.h"
 #include "libavutil/dict.h"
@@ -835,44 +834,14 @@ FILE *get_preset_file(char *filename, size_t filename_size,
 #endif
     char *env_home = getenv_utf8("HOME");
     char *env_ffmpeg_datadir = getenv_utf8("FFMPEG_DATADIR");
-    const char *base[3] = { env_ffmpeg_datadir,
-                            env_home,   /* index=1(HOME) is special: search in a .ffmpeg subfolder */
-                            FFMPEG_DATADIR, };
+    const char *base[2] = { env_ffmpeg_datadir,
+                            env_home, };  /* index=1(HOME) is special: search in a .ffmpeg subfolder */
 
     if (is_path) {
         av_strlcpy(filename, preset_name, filename_size);
         f = fopen_utf8(filename, "r");
     } else {
-#if HAVE_GETMODULEHANDLE && defined(_WIN32)
-        wchar_t *datadir_w = get_module_filename(NULL);
-        base[2] = NULL;
-
-        if (wchartoutf8(datadir_w, &datadir))
-            datadir = NULL;
-        av_free(datadir_w);
-
-        if (datadir)
-        {
-            char *ls;
-            for (ls = datadir; *ls; ls++)
-                if (*ls == '\\') *ls = '/';
-
-            if (ls = strrchr(datadir, '/'))
-            {
-                ptrdiff_t datadir_len = ls - datadir;
-                size_t desired_size = datadir_len + strlen("/ffpresets") + 1;
-                char *new_datadir = av_realloc_array(
-                    datadir, desired_size, sizeof *datadir);
-                if (new_datadir) {
-                    datadir = new_datadir;
-                    datadir[datadir_len] = 0;
-                    strncat(datadir, "/ffpresets",  desired_size - 1 - datadir_len);
-                    base[2] = datadir;
-                }
-            }
-        }
-#endif
-        for (i = 0; i < 3 && !f; i++) {
+        for (i = 0; i < 2 && !f; i++) {
             if (!base[i])
                 continue;
             snprintf(filename, filename_size, "%s%s/%s.ffpreset", base[i],

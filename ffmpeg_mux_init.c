@@ -152,9 +152,8 @@ static int get_preset_file_2(const char *preset_name, const char *codec_name, AV
     char filename[1000];
     char *env_avconv_datadir = getenv_utf8("AVCONV_DATADIR");
     char *env_home = getenv_utf8("HOME");
-    const char *base[3] = { env_avconv_datadir,
+    const char *base[2] = { env_avconv_datadir,
                             env_home,
-                            AVCONV_DATADIR,
                             };
 
     for (i = 0; i < FF_ARRAY_ELEMS(base) && ret < 0; i++) {
