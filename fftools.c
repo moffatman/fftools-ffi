@@ -204,19 +204,19 @@ static void *ffmpeg_thread(void *arg) {
 
 int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback, statistics_callback_fp statistics_callback) {
     FFToolsArg arg;
-    FFToolsSession session;
+    FFToolsSession thisSession;
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
-    session.cancel_requested = 0;
-    session.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
+    thisSession.cancel_requested = 0;
+    thisSession.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
     arg.argc = argc;
     arg.argv = argv;
-    arg.session = &session;
+    arg.session = &thisSession;
     pthread_t thread;
     pthread_create(&thread, NULL, ffmpeg_thread, (void*)&arg); // TODO: Check return value
     while (1) {
         ThreadMessage msg;
         int stream_idx;
-        int tq_ret = tq_receive(session.tq, &stream_idx, &msg);
+        int tq_ret = tq_receive(thisSession.tq, &stream_idx, &msg);
         if (stream_idx < 0 || tq_ret == AVERROR_EOF) {
             // End of data - conversion done
             break;
@@ -233,7 +233,7 @@ int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_cal
     }
     void* ret;
     pthread_join(thread, &ret); // TODO: Check return value
-    tq_free(&session.tq);
+    tq_free(&thisSession.tq);
     return (int)(intptr_t)ret;
 }
 
