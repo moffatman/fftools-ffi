@@ -9,5 +9,5 @@ void log_callback(int level, char* message) {
 }
 
 int main(int argc, char** argv) {
-	ffmpeg_execute_with_callbacks(argc, argv, log_callback, NULL);
+	ffmpeg_execute_with_callbacks(argc - 1, argv + 1, log_callback, NULL);
 }

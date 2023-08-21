@@ -360,7 +360,7 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
     prepare_app_arguments(&argc, &argv);
 
     /* parse options */
-    optindex = 1;
+    optindex = 0;
     while (optindex < argc) {
         opt = argv[optindex++];
 
@@ -424,7 +424,7 @@ int locate_option(int argc, char **argv, const OptionDef *options,
     const OptionDef *po;
     int i;
 
-    for (i = 1; i < argc; i++) {
+    for (i = 0; i < argc; i++) {
         const char *cur_opt = argv[i];
 
         if (*cur_opt++ != '-')
@@ -700,7 +700,7 @@ int split_commandline(OptionParseContext *octx, int argc, char *argv[],
                       const OptionDef *options,
                       const OptionGroupDef *groups, int nb_groups)
 {
-    int optindex = 1;
+    int optindex = 0;
     int dashdash = -2;
 
     /* perform system-dependent conversions for arguments list */

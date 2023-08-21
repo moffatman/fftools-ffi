@@ -8,5 +8,5 @@ void log_callback(int level, char* message) {
 }
 
 int main(int argc, char** argv) {
-	ffprobe_execute_with_callbacks(argc, argv, log_callback);
+	ffprobe_execute_with_callbacks(argc - 1, argv + 1, log_callback);
 }
