@@ -30,9 +30,6 @@ int ffprobe_execute(int argc, char **argv);
 void fftools_log_callback_function(void *ptr, int level, const char* format, va_list vargs);
 static void fftools_statistics_callback_function(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed);
 
-typedef void (*log_callback_fp)(int level, char* message);
-typedef void (*statistics_callback_fp)(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed);
-
 static const char *avutil_log_get_level_str(int level) {
     switch (level) {
     case AV_LOG_STDERR:
@@ -192,7 +189,7 @@ typedef struct FFToolsArg {
     FFToolsSession* session;
 } FFToolsArg;
 
-static void *ffmpeg_thread(void *arg) {
+void *ffmpeg_thread(void *arg) {
     FFToolsArg* toolsArg = arg;
     session = toolsArg->session;
     av_log_set_callback(fftools_log_callback_function);
@@ -202,42 +199,46 @@ static void *ffmpeg_thread(void *arg) {
     return (void*)(intptr_t)ret;
 }
 
-int ffmpeg_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback, statistics_callback_fp statistics_callback) {
+int ffmpeg_execute_with_callbacks(int argc, char **argv, session_callback_fp session_callback, log_callback_fp log_callback, statistics_callback_fp statistics_callback, void* user_data) {
     FFToolsArg arg;
-    FFToolsSession thisSession;
+    session = malloc(sizeof(FFToolsSession));
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
-    thisSession.cancel_requested = 0;
-    thisSession.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
+    session->cancel_requested = 0;
+    session->tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
     arg.argc = argc;
     arg.argv = argv;
-    arg.session = &thisSession;
+    arg.session = session;
+    if (session_callback) {
+        session_callback(session, user_data);
+    }
     pthread_t thread;
     pthread_create(&thread, NULL, ffmpeg_thread, (void*)&arg); // TODO: Check return value
     while (1) {
         ThreadMessage msg;
         int stream_idx;
-        int tq_ret = tq_receive(thisSession.tq, &stream_idx, &msg);
+        int tq_ret = tq_receive(session->tq, &stream_idx, &msg);
         if (stream_idx < 0 || tq_ret == AVERROR_EOF) {
             // End of data - conversion done
             break;
         }
         if (msg.type == THREADMESSAGE_LOG) {
             if (log_callback) {
-                log_callback(msg.data.log_val.level, msg.data.log_val.message);
+                log_callback(msg.data.log_val.level, msg.data.log_val.message, user_data);
             }
         }
         else if (statistics_callback) {
-            statistics_callback(msg.data.stats_val.frameNumber, msg.data.stats_val.fps, msg.data.stats_val.quality, msg.data.stats_val.size, msg.data.stats_val.time, msg.data.stats_val.bitrate, msg.data.stats_val.speed);
+            statistics_callback(msg.data.stats_val.frameNumber, msg.data.stats_val.fps, msg.data.stats_val.quality, msg.data.stats_val.size, msg.data.stats_val.time, msg.data.stats_val.bitrate, msg.data.stats_val.speed, user_data);
         }
         reset_threadmessage(&msg);
     }
     void* ret;
     pthread_join(thread, &ret); // TODO: Check return value
-    tq_free(&thisSession.tq);
+    tq_free(&session->tq);
+    free(session);
     return (int)(intptr_t)ret;
 }
 
-static void *ffprobe_thread(void *arg) {
+void *ffprobe_thread(void *arg) {
     FFToolsArg* toolsArg = arg;
     session = toolsArg->session;
     av_log_set_callback(fftools_log_callback_function);
@@ -247,33 +248,37 @@ static void *ffprobe_thread(void *arg) {
     return (void*)(intptr_t)ret;
 }
 
-int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback) {
+int ffprobe_execute_with_callbacks(int argc, char **argv, session_callback_fp session_callback, log_callback_fp log_callback, void* user_data) {
     FFToolsArg arg;
-    FFToolsSession session;
+    session = malloc(sizeof(FFToolsSession));
     ObjPool *op = objpool_alloc(alloc_threadmessage, reset_threadmessage, free_threadmessage);
-    session.cancel_requested = 0;
-    session.tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
+    session->cancel_requested = 0;
+    session->tq = tq_alloc(1, 10, op, threadmessage_move); // TODO: Idk
     arg.argc = argc;
     arg.argv = argv;
-    arg.session = &session;
+    arg.session = session;
+    if (session_callback) {
+        session_callback(session, user_data);
+    }
     pthread_t thread;
     pthread_create(&thread, NULL, ffprobe_thread, (void*)&arg); // TODO: Check return value
     while (1) {
         ThreadMessage msg;
         int stream_idx;
-        int tq_ret = tq_receive(session.tq, &stream_idx, &msg);
+        int tq_ret = tq_receive(session->tq, &stream_idx, &msg);
         if (stream_idx < 0 || tq_ret == AVERROR_EOF) {
             // End of data - conversion done
             break;
         }
         if (msg.type == THREADMESSAGE_LOG && log_callback) {
-            log_callback(msg.data.log_val.level, msg.data.log_val.message);
+            log_callback(msg.data.log_val.level, msg.data.log_val.message, user_data);
         }
         reset_threadmessage(&msg);
     }
     void* ret;
     pthread_join(thread, &ret); // TODO: Check return value
-    tq_free(&session.tq);
+    tq_free(&session->tq);
+    free(session);
     return (int)(intptr_t)ret;
 }
 

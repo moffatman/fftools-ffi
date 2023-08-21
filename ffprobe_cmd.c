@@ -1,12 +1,11 @@
 #include "stdio.h"
 
-typedef void (*log_callback_fp)(int level, char* message);
-extern int ffprobe_execute_with_callbacks(int argc, char **argv, log_callback_fp log_callback);
+#include "fftools_api.h"
 
-void log_callback(int level, char* message) {
+void log_callback(int level, char* message, void* user_data) {
 	printf("%s", message);
 }
 
 int main(int argc, char** argv) {
-	ffprobe_execute_with_callbacks(argc - 1, argv + 1, log_callback);
+	ffprobe_execute_with_callbacks(argc - 1, argv + 1, NULL, log_callback, NULL);
 }

@@ -1,4 +1,4 @@
-project('fftools-ffi', 'c', license: ['LGPL2.1+'])
+project('fftools-ffi', 'c', 'cpp', license: ['LGPL2.1+'])
 
 ffmpeg = [
 	dependency('libavformat'),
@@ -11,6 +11,7 @@ ffmpeg = [
 
 sources = [
 	'cmdutils.c',
+	'dart_api.cc',
 	'ffmpeg_hw.c',
 	'ffmpeg_opt.c',
 	'ffmpeg.c',
@@ -27,9 +28,9 @@ sources = [
 ]
 
 lib = library('fftools-ffi', sources, dependencies: ffmpeg, install: true)
-ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], link_with: [
+ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], dependencies: ffmpeg, link_with: [
 	lib
 ])
-ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], link_with: [
+ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], dependencies: ffmpeg, link_with: [
 	lib
 ])
