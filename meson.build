@@ -37,8 +37,10 @@ ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], dependencies: ffmpeg, link_with:
 	lib
 ])
 
+install_headers(['dart_api.h'], subdir: 'fftools-ffi')
+
 pkg.generate(libraries : [lib],
-             subdirs : [],
+             subdirs : ['.'],
              version : '1.0',
              name : 'libfftools-ffi',
              filebase : 'fftools-ffi',
