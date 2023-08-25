@@ -1,5 +1,7 @@
 project('fftools-ffi', 'c', 'cpp', license: ['LGPL2.1+'])
 
+pkg = import('pkgconfig')
+
 ffmpeg = [
 	dependency('libavformat'),
 	dependency('libavcodec'),
@@ -34,3 +36,10 @@ ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], dependencies: ffmpeg, link_wi
 ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], dependencies: ffmpeg, link_with: [
 	lib
 ])
+
+pkg.generate(libraries : [lib],
+             subdirs : [],
+             version : '1.0',
+             name : 'libfftools-ffi',
+             filebase : 'fftools-ffi',
+             description : 'FFTools front-end as a library')
