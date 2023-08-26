@@ -3,6 +3,12 @@
 
 #include "stdint.h"
 
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 enum FFToolsMessageType {
 	FFTOOLS_RETURN_CODE_MESSAGE = 0,
 	FFTOOLS_LOG_MESSAGE = 1,
@@ -33,13 +39,13 @@ typedef struct FFToolsMessage {
 extern "C" {
 #endif
 
-void FFToolsFFIInitialize(void* post_c_object);
+DLLEXPORT void FFToolsFFIInitialize(void* post_c_object);
 
-void FFToolsFFIExecuteFFmpeg(int64_t send_port, int argc, char **argv);
+DLLEXPORT void FFToolsFFIExecuteFFmpeg(int64_t send_port, int argc, char **argv);
 
-void FFToolsFFIExecuteFFprobe(int64_t send_port, int argc, char **argv);
+DLLEXPORT void FFToolsFFIExecuteFFprobe(int64_t send_port, int argc, char **argv);
 
-void FFToolsCancel(int64_t send_port);
+DLLEXPORT void FFToolsCancel(int64_t send_port);
 
 #if defined(__cplusplus)
 }  // extern "C"
