@@ -1,4 +1,4 @@
-project('fftools-ffi', 'c', 'cpp', license: ['LGPL2.1+'])
+project('fftools-ffi', 'c', license: ['LGPL2.1+'])
 
 pkg = import('pkgconfig')
 
@@ -13,7 +13,7 @@ ffmpeg = [
 
 sources = [
 	'cmdutils.c',
-	'dart_api.cc',
+	'dart_api.c',
 	'ffmpeg_hw.c',
 	'ffmpeg_opt.c',
 	'ffmpeg.c',

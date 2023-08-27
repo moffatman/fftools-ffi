@@ -1,12 +1,72 @@
-#include <map>
-
 #include "dart_api.h"
 #include "dart_api_types.h"
 #include "fftools_api.h"
 #include "libavutil/thread.h"
 
-static Dart_PostCObject post_c_object_ = nullptr;
-static std::map<Dart_Port, FFToolsSession*> sessions_;
+static Dart_PostCObject post_c_object_ = NULL;
+static pthread_mutex_t* lock;
+
+struct node {
+	Dart_Port port;
+	FFToolsSession* session;
+	struct node* next;
+};
+
+struct node* head;
+
+static void ensure_lock_created() {
+	if (lock) {
+		return;
+	}
+	lock = malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init(lock, NULL);
+}
+
+static FFToolsSession* find_session(Dart_Port port) {
+	ensure_lock_created();
+	FFToolsSession* session = NULL;
+	pthread_mutex_lock(lock);
+	struct node* p = head;
+	while (p) {
+		if (p->port == port) {
+			session = p->session;
+			break;
+		}
+		p = p->next;
+	}
+	pthread_mutex_unlock(lock);
+	return session;
+}
+
+static void store_session(Dart_Port port, FFToolsSession* session) {
+	ensure_lock_created();
+	pthread_mutex_lock(lock);
+	struct node** to_p = &head;
+	while (*to_p) {
+		to_p = &(*to_p)->next;
+	}
+	*to_p = malloc(sizeof(struct node));
+	(*to_p)->next = NULL;
+	(*to_p)->port = port;
+	(*to_p)->session = session;
+	pthread_mutex_unlock(lock);
+}
+
+static void remove_session(Dart_Port port) {
+	ensure_lock_created();
+	pthread_mutex_lock(lock);
+	struct node** to_p = &head;
+	while (*to_p) {
+		if ((*to_p)->port == port) {
+			struct node* new_p = (*to_p)->next;
+			free(*to_p);
+			*to_p = new_p;
+			break;
+		}
+		to_p = &(*to_p)->next;
+	}
+	pthread_mutex_unlock(lock);
+}
 
 typedef struct DartApiArg {
 	int64_t send_port;
@@ -19,8 +79,7 @@ void FFToolsFFIInitialize(void* post_c_object) {
 }
 
 static void ffi_session_callback(FFToolsSession* session, void* user_data) {
-	Dart_Port port = (Dart_Port)user_data;
-	sessions_[port] = session;
+	store_session((Dart_Port)user_data, session);
 }
 
 static void ffi_log_callback(int level, char* log_message, void* user_data) {
@@ -86,13 +145,13 @@ static void* ffmpeg_thread_(void* arg) {
 		fprintf(stderr, "Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
 		free(message);
 	}
-	sessions_.erase(dartArg->send_port);
+	remove_session(dartArg->send_port);
 	for (int i = 0; i < dartArg->argc; i++) {
 		free(dartArg->argv[i]);
 	}
 	free(dartArg->argv);
 	free(dartArg);
-	return nullptr;
+	return NULL;
 }
 
 void FFToolsFFIExecuteFFmpeg(int64_t send_port, int argc, char **argv) {
@@ -119,13 +178,13 @@ static void* ffprobe_thread_(void* arg) {
 		fprintf(stderr, "Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
 		free(message);
 	}
-	sessions_.erase(dartArg->send_port);
+	remove_session(dartArg->send_port);
 	for (int i = 0; i < dartArg->argc; i++) {
 		free(dartArg->argv[i]);
 	}
 	free(dartArg->argv);
 	free(dartArg);
-	return nullptr;
+	return NULL;
 }
 
 
@@ -139,10 +198,10 @@ void FFToolsFFIExecuteFFprobe(int64_t send_port, int argc, char **argv) {
 }
 
 void FFToolsCancel(int64_t send_port) {
-	std::map<Dart_Port, FFToolsSession*>::iterator session = sessions_.find(send_port);
-	if (session == sessions_.end()) {
+	FFToolsSession* session = find_session(send_port);
+	if (!session) {
 		fprintf(stderr, "Failed to find session for send_port %lld to cancel\n", send_port);
 		return;
 	}
-	session->second->cancel_requested = 1;
+	session->cancel_requested = 1;
 }
