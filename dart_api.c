@@ -80,7 +80,7 @@ void FFToolsFFIInitialize(void* post_c_object) {
 }
 
 static void ffi_session_callback(FFToolsSession* session, void* user_data) {
-	store_session((Dart_Port)user_data, session);
+	store_session(*((Dart_Port*)user_data), session);
 }
 
 static void ffi_log_callback(int level, char* log_message, void* user_data) {
@@ -88,7 +88,7 @@ static void ffi_log_callback(int level, char* log_message, void* user_data) {
 		printf_stderr("Got log callback [%d] without post_c_object_: %s\n", level, log_message);
 		return;
 	}
-	Dart_Port port = (Dart_Port)user_data;
+	Dart_Port port = *((Dart_Port*)user_data);
 	FFToolsMessage *message = (FFToolsMessage*)malloc(sizeof(FFToolsMessage));
 	message->type = FFTOOLS_LOG_MESSAGE;
 	message->data.log_val.level = level;
@@ -110,7 +110,7 @@ static void ffi_statistics_callback(int frameNumber, float fps, float quality, i
 		printf_stderr("Got statistics callback without post_c_object_\n");
 		return;
 	}
-	Dart_Port port = (Dart_Port)user_data;
+	Dart_Port port = *((Dart_Port*)user_data);
 	FFToolsMessage *message = (FFToolsMessage*)malloc(sizeof(FFToolsMessage));
 	message->type = FFTOOLS_STATISTICS_MESSAGE;
 	message->data.stats_val.frameNumber = frameNumber;
@@ -133,7 +133,7 @@ static void ffi_statistics_callback(int frameNumber, float fps, float quality, i
 
 static void* ffmpeg_thread_(void* arg) {
 	DartApiArg* dartArg = (DartApiArg*)arg;
-	int returnCode = ffmpeg_execute_with_callbacks(dartArg->argc, dartArg->argv, ffi_session_callback, ffi_log_callback, ffi_statistics_callback, (void*)dartArg->send_port);
+	int returnCode = ffmpeg_execute_with_callbacks(dartArg->argc, dartArg->argv, ffi_session_callback, ffi_log_callback, ffi_statistics_callback, &dartArg->send_port);
 	FFToolsMessage *message = (FFToolsMessage*)malloc(sizeof(FFToolsMessage));
 	message->type = FFTOOLS_RETURN_CODE_MESSAGE;
 	message->data.returnCode = returnCode;
@@ -166,7 +166,7 @@ void FFToolsFFIExecuteFFmpeg(int64_t send_port, int argc, char **argv) {
 
 static void* ffprobe_thread_(void* arg) {
 	DartApiArg* dartArg = (DartApiArg*)arg;
-	int returnCode = ffprobe_execute_with_callbacks(dartArg->argc, dartArg->argv, ffi_session_callback, ffi_log_callback, (void*)dartArg->send_port);
+	int returnCode = ffprobe_execute_with_callbacks(dartArg->argc, dartArg->argv, ffi_session_callback, ffi_log_callback, &dartArg->send_port);
 	FFToolsMessage *message = (FFToolsMessage*)malloc(sizeof(FFToolsMessage));
 	message->type = FFTOOLS_RETURN_CODE_MESSAGE;
 	message->data.returnCode = returnCode;
