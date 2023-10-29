@@ -1895,7 +1895,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     if (print_stats || is_last_report) {
         const char end = is_last_report ? '\n' : '\r';
         if (print_stats==1 && AV_LOG_INFO > av_log_get_level()) {
-            fprintf(stderr, "%s    %c", buf.str, end);
+            printf_stderr("%s    %c", buf.str, end);
         } else
             av_log(NULL, AV_LOG_INFO, "%s    %c", buf.str, end);
 
@@ -3702,7 +3702,7 @@ static int check_keyboard_interaction(int64_t cur_time)
         char buf[4096], target[64], command[256], arg[256] = {0};
         double time;
         int k, n = 0;
-        fprintf(stderr, "\nEnter command: <target>|all <time>|-1 <command>[ <argument>]\n");
+        printf_stderr("\nEnter command: <target>|all <time>|-1 <command>[ <argument>]\n");
         i = 0;
         set_tty_echo(1);
         while ((k = read_key()) != '\n' && k != '\r' && i < sizeof(buf)-1)
@@ -3710,7 +3710,7 @@ static int check_keyboard_interaction(int64_t cur_time)
                 buf[i++] = k;
         buf[i] = 0;
         set_tty_echo(0);
-        fprintf(stderr, "\n");
+        printf_stderr("\n");
         if (k > 0 &&
             (n = sscanf(buf, "%63[^ ] %lf %255[^ ] %255[^\n]", target, &time, command, arg)) >= 3) {
             av_log(NULL, AV_LOG_DEBUG, "Processing command target:%s time:%f command:%s arg:%s",
@@ -3721,14 +3721,14 @@ static int check_keyboard_interaction(int64_t cur_time)
                     if (time < 0) {
                         ret = avfilter_graph_send_command(fg->graph, target, command, arg, buf, sizeof(buf),
                                                           key == 'c' ? AVFILTER_CMD_FLAG_ONE : 0);
-                        fprintf(stderr, "Command reply for stream %d: ret:%d res:\n%s", i, ret, buf);
+                        printf_stderr("Command reply for stream %d: ret:%d res:\n%s", i, ret, buf);
                     } else if (key == 'c') {
-                        fprintf(stderr, "Queuing commands only on filters supporting the specific command is unsupported\n");
+                        printf_stderr("Queuing commands only on filters supporting the specific command is unsupported\n");
                         ret = AVERROR_PATCHWELCOME;
                     } else {
                         ret = avfilter_graph_queue_command(fg->graph, target, command, arg, 0, time);
                         if (ret < 0)
-                            fprintf(stderr, "Queuing command failed with error %s\n", av_err2str(ret));
+                            printf_stderr("Queuing command failed with error %s\n", av_err2str(ret));
                     }
                 }
             }
@@ -3759,9 +3759,9 @@ static int check_keyboard_interaction(int64_t cur_time)
                     buf[i++] = k;
             buf[i] = 0;
             set_tty_echo(0);
-            fprintf(stderr, "\n");
+            printf_stderr("\n");
             if (k <= 0 || sscanf(buf, "%d", &debug)!=1)
-                fprintf(stderr,"error parsing debug value\n");
+                printf_stderr("error parsing debug value\n");
         }
         for (InputStream *ist = ist_iter(NULL); ist; ist = ist_iter(ist))
             ist->dec_ctx->debug = debug;
@@ -3770,10 +3770,10 @@ static int check_keyboard_interaction(int64_t cur_time)
                 ost->enc_ctx->debug = debug;
         }
         if(debug) av_log_set_level(AV_LOG_DEBUG);
-        fprintf(stderr,"debug=%d\n", debug);
+        printf_stderr("debug=%d\n", debug);
     }
     if (key == '?'){
-        fprintf(stderr, "key    function\n"
+        printf_stderr("key    function\n"
                         "?      show this help\n"
                         "+      increase verbosity\n"
                         "-      decrease verbosity\n"

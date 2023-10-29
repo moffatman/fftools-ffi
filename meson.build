@@ -2,7 +2,7 @@ project('fftools-ffi', 'c', license: ['LGPL2.1+'])
 
 pkg = import('pkgconfig')
 
-ffmpeg = [
+deps = [
 	dependency('libavformat'),
 	dependency('libavcodec'),
 	dependency('libavutil'),
@@ -10,6 +10,11 @@ ffmpeg = [
 	dependency('libswresample'),
 	dependency('libswscale')
 ]
+
+if host_machine.system() == 'android'
+	deps += meson.get_compiler('c').find_library('android', has_headers: ['android/log.h'], required: true)
+	deps += meson.get_compiler('c').find_library('log', has_headers: ['android/log.h'], required: true)
+endif
 
 sources = [
 	'cmdutils.c',
@@ -29,11 +34,11 @@ sources = [
 	'thread_queue.c'
 ]
 
-lib = library('fftools-ffi', sources, dependencies: ffmpeg, install: true)
-ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], dependencies: ffmpeg, link_with: [
+lib = library('fftools-ffi', sources, dependencies: deps, install: true)
+ffprobe = executable('ffprobe', ['ffprobe_cmd.c'], dependencies: deps, link_with: [
 	lib
 ])
-ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], dependencies: ffmpeg, link_with: [
+ffmpeg = executable('ffmpeg', ['ffmpeg_cmd.c'], dependencies: deps, link_with: [
 	lib
 ])
 

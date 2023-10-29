@@ -1,5 +1,6 @@
 #include "dart_api.h"
 #include "dart_api_types.h"
+#include "fftools.h"
 #include "fftools_api.h"
 #include "libavutil/thread.h"
 
@@ -84,7 +85,7 @@ static void ffi_session_callback(FFToolsSession* session, void* user_data) {
 
 static void ffi_log_callback(int level, char* log_message, void* user_data) {
 	if (!post_c_object_) {
-		fprintf(stderr, "Got log callback [%d] without post_c_object_: %s", level, log_message);
+		printf_stderr("Got log callback [%d] without post_c_object_: %s\n", level, log_message);
 		return;
 	}
 	Dart_Port port = (Dart_Port)user_data;
@@ -98,7 +99,7 @@ static void ffi_log_callback(int level, char* log_message, void* user_data) {
 	int ret = post_c_object_(port, &object);
 	if (!ret) {
 		// Send failed
-		fprintf(stderr, "Failed to post_c_object_ for log with error %d\n", ret);
+		printf_stderr("Failed to post_c_object_ for log with error %d\n", ret);
 		free(message->data.log_val.message);
 		free(message);
 	}
@@ -106,7 +107,7 @@ static void ffi_log_callback(int level, char* log_message, void* user_data) {
 
 static void ffi_statistics_callback(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed, void* user_data) {
 	if (!post_c_object_) {
-		fprintf(stderr, "Got statistics callback without post_c_object_\n");
+		printf_stderr("Got statistics callback without post_c_object_\n");
 		return;
 	}
 	Dart_Port port = (Dart_Port)user_data;
@@ -125,7 +126,7 @@ static void ffi_statistics_callback(int frameNumber, float fps, float quality, i
 	int ret = post_c_object_(port, &object);
 	if (!ret) {
 		// Send failed
-		fprintf(stderr, "Failed to post_c_object_ for stats with error %d\n", ret);
+		printf_stderr("Failed to post_c_object_ for stats with error %d\n", ret);
 		free(message);
 	}
 }
@@ -142,7 +143,7 @@ static void* ffmpeg_thread_(void* arg) {
 	int ret = post_c_object_(dartArg->send_port, &object);
 	if (!ret) {
 		// Send failed
-		fprintf(stderr, "Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
+		printf_stderr("Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
 		free(message);
 	}
 	remove_session(dartArg->send_port);
@@ -175,7 +176,7 @@ static void* ffprobe_thread_(void* arg) {
 	int ret = post_c_object_(dartArg->send_port, &object);
 	if (!ret) {
 		// Send failed
-		fprintf(stderr, "Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
+		printf_stderr("Failed to post_c_object_ for return code %d with error %d\n", returnCode, ret);
 		free(message);
 	}
 	remove_session(dartArg->send_port);
@@ -200,7 +201,7 @@ void FFToolsFFIExecuteFFprobe(int64_t send_port, int argc, char **argv) {
 void FFToolsCancel(int64_t send_port) {
 	FFToolsSession* session = find_session(send_port);
 	if (!session) {
-		fprintf(stderr, "Failed to find session for send_port %lld to cancel\n", send_port);
+		printf_stderr("Failed to find session for send_port %lld to cancel\n", send_port);
 		return;
 	}
 	session->cancel_requested = 1;

@@ -1,3 +1,6 @@
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 #include <stdatomic.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -8,6 +11,19 @@
 #include "ffmpeg.h"
 #include "thread_queue.h"
 #include "fftools.h"
+
+int printf_stderr(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+#ifdef __ANDROID__ 
+    // Android stderr is not exposed, need to use an alternative
+    int ret = __android_log_vprint(ANDROID_LOG_WARN, "fftools-ffi", fmt, args);
+#else
+    int ret = vfprintf(stderr, fmt, args);
+#endif
+    va_end(args);
+    return ret;
+}
 
 /** Fields that control the handling of SIGNALs */
 volatile int handleSIGQUIT = 1;
@@ -155,7 +171,7 @@ static void threadmessage_move(void *dst, void *src) {
 
 void write_log_message_to_tq(int level, char* message) {
     if (!session) {
-        fprintf(stderr, "No way to forward message with level %d and content %s\n", level, message);
+        printf_stderr("No way to forward message with level %d and content %s\n", level, message);
         return;
     }
     ThreadMessage data;
@@ -167,7 +183,7 @@ void write_log_message_to_tq(int level, char* message) {
 
 void write_statistics_message_to_tq(int frameNumber, float fps, float quality, int64_t size, int time, double bitrate, double speed) {
     if (!session) {
-        fprintf(stderr, "No way to forward stats with frameNumber %d, fps %f, quality %f, size %lld, time %d, bitrate %f, speed %f\n", frameNumber, fps, quality, size, time, bitrate, speed);
+        printf_stderr("No way to forward stats with frameNumber %d, fps %f, quality %f, size %lld, time %d, bitrate %f, speed %f\n", frameNumber, fps, quality, size, time, bitrate, speed);
         return;
     }
     ThreadMessage data;
