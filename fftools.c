@@ -76,7 +76,7 @@ static void avutil_log_format_line(void *avcl, int level, const char *fmt, va_li
     av_bprint_init(part+0, 0, 1);
     av_bprint_init(part+1, 0, 1);
     av_bprint_init(part+2, 0, 1);
-    av_bprint_init(part+3, 0, 65536);
+    av_bprint_init(part+3, 0, 1);
 
     if (*print_prefix && avc) {
         if (avc->parent_log_context_offset) {
