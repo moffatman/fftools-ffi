@@ -52,37 +52,36 @@ Future<(int, String)> ffprobe(List<String> args) {
 	final initialize = fftools.lookupFunction<Void Function(Pointer), void Function(Pointer)>('FFToolsFFIInitialize');
 	initialize(NativeApi.postCObject);
 	final ffprobe = fftools.lookupFunction<Void Function(Int64, Int, Pointer<Pointer<Utf8>>), void Function(int, int, Pointer<Pointer<Utf8>>)>('FFToolsFFIExecuteFFprobe');
-  using((arena) {
-    final argv = arena<Pointer<Utf8>>(args.length);
-    for (int i = 0; i < args.length; i++) {
-      argv[i] = args[i].toNativeUtf8(allocator: arena);
-    }
-    final port = ReceivePort();
-    const logLevel = 32;
-    final buffer = StringBuffer();
-    port.listen((data) {
-      if (data is int) {
-        final messagePointer = Pointer<FFToolsMessage>.fromAddress(data);
-        switch (messagePointer.ref.type) {
-          case _kFFToolsMessageTypeReturnCode:
-            port.close();
-            completer.complete((messagePointer.ref.data.returnCode, buffer.toString()));
-          case _kFFToolsMessageTypeLog:
-            if (messagePointer.ref.data.log.level <= logLevel) {
-              buffer.write(messagePointer.ref.data.log.message.toDartString());
-            }
-          case _kFFToolsMessageTypeStatistics:
-            final stats = messagePointer.ref.data.statistics;
-            print('Statistics frameNumber: ${stats.frameNumber}, fps: ${stats.fps}, quality: ${stats.quality}, size: ${stats.size}, time: ${stats.time}, bitrate: ${stats.bitrate}, speed: ${stats.speed}');
-        }
-        if (messagePointer.ref.type == _kFFToolsMessageTypeLog) {
-          malloc.free(messagePointer.ref.data.log.message);
-        }
-        malloc.free(messagePointer);
+  // Not freeing this memory is intentional. FFToolsFFI will free it when done execution.
+  final argv = malloc<Pointer<Utf8>>(args.length);
+  for (int i = 0; i < args.length; i++) {
+    argv[i] = args[i].toNativeUtf8(allocator: malloc);
+  }
+  final port = ReceivePort();
+  const logLevel = 32;
+  final buffer = StringBuffer();
+  port.listen((data) {
+    if (data is int) {
+      final messagePointer = Pointer<FFToolsMessage>.fromAddress(data);
+      switch (messagePointer.ref.type) {
+        case _kFFToolsMessageTypeReturnCode:
+          port.close();
+          completer.complete((messagePointer.ref.data.returnCode, buffer.toString()));
+        case _kFFToolsMessageTypeLog:
+          if (messagePointer.ref.data.log.level <= logLevel) {
+            buffer.write(messagePointer.ref.data.log.message.toDartString());
+          }
+        case _kFFToolsMessageTypeStatistics:
+          final stats = messagePointer.ref.data.statistics;
+          print('Statistics frameNumber: ${stats.frameNumber}, fps: ${stats.fps}, quality: ${stats.quality}, size: ${stats.size}, time: ${stats.time}, bitrate: ${stats.bitrate}, speed: ${stats.speed}');
       }
-    });
-    ffprobe(port.sendPort.nativePort, args.length, argv);
-  }, malloc);
+      if (messagePointer.ref.type == _kFFToolsMessageTypeLog) {
+        malloc.free(messagePointer.ref.data.log.message);
+      }
+      malloc.free(messagePointer);
+    }
+  });
+  ffprobe(port.sendPort.nativePort, args.length, argv);
   return completer.future;
 }
 
